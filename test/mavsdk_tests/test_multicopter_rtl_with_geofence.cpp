@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2012-2019 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2026 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,75 +31,43 @@
  *
  ****************************************************************************/
 
-/**
- * @file Publication.cpp
- *
- * Out-of-line definitions of the type-independent PublicationBase machinery.
- * Keeping advertise()/publish() out of the header emits them once instead of
- * once per translation unit (PX4 links with bfd ld, no ICF, and no LTO).
- */
+#include "autopilot_tester_rtl.h"
 
-#include "Publication.hpp"
-#include "PublicationMulti.hpp"
-
-namespace uORB
+// Exercises the RTL_DIRECT geofence avoidance planner (visibility graph + Dijkstra).
+//
+// Setup: mission flies the vehicle to a point from which the straight-line return-to-home would
+// cut through an exclusion polygon. The planner must detour around it.
+//
+// Pass: the vehicle returns to home and disarms within the timeout AND its ground-truth position
+// never violates any of the loaded geofences during the entire armed flight.
+TEST_CASE("RTL direct with geofence obstruction", "[multicopter]")
 {
+	AutopilotTesterRtl tester;
+	tester.connect(connection_url);
+	tester.wait_until_ready();
+	tester.store_home();
 
-PublicationBase::~PublicationBase()
-{
-	if (_handle != nullptr) {
-		// don't automatically unadvertise queued publications (eg vehicle_command)
-		if (Manager::orb_get_queue_size(_handle) == 1) {
-			unadvertise();
-		}
-	}
+	// Mission outbound leg ends at a point where straight-line RTL crosses the exclusion polygon
+	// in the .plan; the planner must detour around it.
+	tester.load_qgc_mission_and_geofence_here("test/mavsdk_tests/multicopter_mission_geofence_avoid.plan");
+
+	// Warning only: the planner still picks up the fence (it reads polygon geometry independent of
+	// GF_ACTION), but a hypothetical breach won't trigger Hold/RTL failsafe and mask test failure.
+	tester.set_param_int("GF_ACTION", 1);
+
+	tester.set_rtl_type(0); // RTL_DIRECT
+	tester.set_rtl_appr_force(0);
+
+	tester.sleep_for(std::chrono::seconds(3));
+
+	tester.arm();
+
+	// Latch a breach detector covering everything from here until disarm.
+	tester.start_monitoring_geofence_breach();
+	tester.execute_rtl_when_reaching_mission_sequence(3);
+
+	tester.wait_until_disarmed(std::chrono::seconds(400));
+
+	tester.check_no_geofence_breach();
+	tester.check_home_within(5.0f);
 }
-
-bool PublicationBase::advertise()
-{
-	if (!advertised()) {
-		_handle = orb_advertise(get_topic(), nullptr);
-	}
-
-	return advertised();
-}
-
-bool PublicationBase::publish(const void *data)
-{
-	if (!advertised()) {
-		advertise();
-	}
-
-	return (Manager::orb_publish(get_topic(), _handle, data) == PX4_OK);
-}
-
-bool PublicationMultiBase::advertise()
-{
-	if (!advertised()) {
-		int instance = 0;
-		_handle = orb_advertise_multi(get_topic(), nullptr, &instance);
-	}
-
-	return advertised();
-}
-
-bool PublicationMultiBase::publish(const void *data)
-{
-	if (!advertised()) {
-		advertise();
-	}
-
-	return (orb_publish(get_topic(), _handle, data) == PX4_OK);
-}
-
-int PublicationMultiBase::get_instance()
-{
-	// advertise if not already advertised
-	if (advertise()) {
-		return Manager::orb_get_instance(_handle);
-	}
-
-	return -1;
-}
-
-} // namespace uORB
