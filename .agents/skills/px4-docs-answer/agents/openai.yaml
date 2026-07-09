@@ -1,0 +1,4 @@
+interface:
+  display_name: "PX4 Docs Answer"
+  short_description: "Turn PX4 docs into practical support replies"
+  default_prompt: "Use $px4-docs-answer to answer this PX4 support question with docs and local code evidence."
