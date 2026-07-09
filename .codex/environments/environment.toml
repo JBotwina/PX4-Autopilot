@@ -98,3 +98,40 @@ cd "${CODEX_WORKTREE_PATH:-$PWD}"
 
 make format_changed
 '''
+
+[[actions]]
+name = "Run Baylands"
+icon = "tool"
+command = '''
+set -euo pipefail
+cd "${CODEX_WORKTREE_PATH:-$PWD}"
+
+[ -f .venv/bin/activate ] && . .venv/bin/activate
+
+export PX4_GZ_WORLD=baylands
+export PX4_HOME_LAT=37.412173071650805
+export PX4_HOME_LON=-121.998878727967
+export PX4_HOME_ALT=38
+
+export PX4_PARAM_COM_RC_IN_MODE=1
+export PX4_PARAM_COM_RCL_EXCEPT=2
+export PX4_PARAM_NAV_RCL_ACT=6
+
+cat <<'EOF'
+Starting Baylands RC-loss/Land repro SITL.
+
+QGC setup:
+  1. Enable Virtual Joystick.
+  2. Take off with gz_x500.
+  3. Switch to Hold.
+  4. In the PX4 shell, run: param set COM_RC_IN_MODE 0
+  5. Press Land in QGC.
+
+Preloaded params:
+  COM_RC_IN_MODE=1
+  COM_RCL_EXCEPT=2
+  NAV_RCL_ACT=6
+EOF
+
+make px4_sitl gz_x500
+'''
