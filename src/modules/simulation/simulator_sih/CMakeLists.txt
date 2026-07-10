@@ -39,6 +39,7 @@ px4_add_module(
 	SRCS
 		aero.hpp
 		sih.cpp
+		sih_airspeed.hpp
 		sih.hpp
 	MODULE_CONFIG
 		sih_params.yaml
@@ -49,6 +50,8 @@ px4_add_module(
 		drivers_rangefinder
 		geo
 	)
+
+px4_add_unit_gtest(SRC SihAirspeedTest.cpp)
 
 if(PX4_PLATFORM MATCHES "posix")
 	# create targets for sihsim

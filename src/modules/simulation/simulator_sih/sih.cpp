@@ -42,6 +42,7 @@
 
 #include "aero.hpp"
 #include "sih.hpp"
+#include "sih_airspeed.hpp"
 
 #include <px4_platform_common/getopt.h>
 #include <px4_platform_common/log.h>
@@ -725,9 +726,11 @@ void Sih::send_airspeed(const hrt_abstime &time_now_us)
 	airspeed_s airspeed{};
 	airspeed.timestamp_sample = time_now_us;
 
-	// pitot tube measures forward (body-x) airspeed
 	const Vector3f v_apparent_B = _q.rotateVectorInverse(_v_apparent_N);
-	airspeed.true_airspeed_m_s = fmaxf(0.1f, v_apparent_B(0) + generate_wgn() * 0.2f);
+	// The tailsitter's forward axis is body -Z; other SIH aircraft use body +X.
+	const sih::PitotAxis pitot_axis = _vehicle == VehicleType::TailsitterVTOL ? sih::PitotAxis::NegativeBodyZ :
+					  sih::PitotAxis::BodyX;
+	airspeed.true_airspeed_m_s = fmaxf(0.1f, sih::pitotAxisVelocity(v_apparent_B, pitot_axis) + generate_wgn() * 0.2f);
 	airspeed.indicated_airspeed_m_s = airspeed.true_airspeed_m_s * sqrtf(_wing_l.get_rho() / RHO);
 	airspeed.confidence = 0.7f;
 	airspeed.timestamp = hrt_absolute_time();
