@@ -289,6 +289,12 @@ set(msg_files
 )
 list(SORT msg_files)
 
+if(CONFIG_NAVIGATOR_ADSB)
+	list(APPEND msg_files
+		DetectAndAvoid.msg
+		DetectAndAvoidMostUrgent.msg)
+endif()
+
 if(CONFIG_MODULES_VISION_TARGET_ESTIMATOR)
 	list(APPEND msg_files
 		TargetGnss.msg
@@ -549,7 +555,7 @@ if(CONFIG_LIB_CDRSTREAM)
                   FILES ${uorb_cdr_idl}
                   INCLUDES ${idl_include_path}
                   BASE_DIR ${idl_include_path}
-                  WARNINGS no-implicit-extensibility)
+                  WARNINGS no-implicit-extensibility no-unsupported-annotations)
 	target_link_libraries(uorb_cdrstream INTERFACE cdr)
 
 	# Generate and overwrite IDL header with custom headers for uORB operatability
