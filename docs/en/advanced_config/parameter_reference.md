@@ -23873,7 +23873,7 @@ Measurement noise for magnetometer 3-axis fusion.
 
 Type of magnetometer fusion.
 
-Integer controlling the type of magnetometer fusion used - magnetic heading or 3-component vector. The fusion of magnetometer data as a three component vector enables vehicle body fixed hard iron errors to be learned, but requires a stable earth field. If set to 'Automatic' magnetic heading fusion is used when on-ground and 3-axis magnetic field fusion in-flight. If set to 'Magnetic heading' magnetic heading fusion is used at all times. If set to 'None' the magnetometer will not be used under any circumstance. If no external source of yaw is available, it is possible to use post-takeoff horizontal movement combined with GNSS velocity measurements to align the yaw angle. If set to 'Init' the magnetometer is only used to initalize the heading.
+Integer controlling the type of magnetometer fusion used - magnetic heading or 3-component vector. The fusion of magnetometer data as a three component vector enables vehicle body fixed hard iron errors to be learned, but requires a stable earth field. If set to 'Automatic' magnetic heading fusion is used when on-ground and 3-axis magnetic field fusion in-flight. If set to 'Magnetic heading' magnetic heading fusion is used at all times. If set to 'None' the magnetometer will not be used under any circumstance. If no external source of yaw is available, it is possible to use post-takeoff horizontal movement combined with GNSS velocity measurements to align the yaw angle. If set to 'Init' the magnetometer is only used to initialize the heading.
 
 **Values:**
 
@@ -26242,6 +26242,84 @@ WARNING: the failures can easily cause crashes and are to be used with caution!
 | Reboot  | minValue | maxValue | increment | default      | unit | Read-Only |
 | ------- | -------- | -------- | --------- | ------------ | ---- | --------- |
 | &check; |          |          |           | Disabled (0) |      | &nbsp;    |
+
+### SYS_FAIL_RC_INST (`INT32`) {#SYS_FAIL_RC_INST}
+
+Instance failed by the RC switch.
+
+Which instance of SYS_FAIL_RC_UNIT the SYS_FAIL_RC_SRC trigger affects.
+1-based, or 0 for all instances (motor number for motors).
+
+| Reboot  | minValue | maxValue | increment | default | unit | Read-Only |
+| ------- | -------- | -------- | --------- | ------- | ---- | --------- |
+| &check; | 0        | 16       |           | 1       |      | &nbsp;    |
+
+### SYS_FAIL_RC_MODE (`INT32`) {#SYS_FAIL_RC_MODE}
+
+Failure type applied by the RC switch.
+
+How SYS_FAIL_RC_UNIT fails when the SYS_FAIL_RC_SRC trigger fires, on SYS_FAIL_RC_INST.
+unsupported (unit, type) pairs are ignored.
+
+**Values:**
+
+- `0`: Ok (no failure)
+- `1`: Off
+- `2`: Stuck
+- `3`: Garbage
+- `4`: Wrong
+- `5`: Slow
+- `6`: Delayed
+- `7`: Intermittent
+
+| Reboot  | minValue | maxValue | increment | default | unit | Read-Only |
+| ------- | -------- | -------- | --------- | ------- | ---- | --------- |
+| &check; |          |          |           | 0       |      | &nbsp;    |
+
+### SYS_FAIL_RC_SRC (`INT32`) {#SYS_FAIL_RC_SRC}
+
+RC aux input that triggers failure injection.
+
+Defines the aux switch which injects the failure defined by SYS_FAIL_RC_UNIT,
+SYS_FAIL_RC_MODE and SYS_FAIL_RC_INST;
+Mapped via RC_MAP_AUXn and gated by SYS_FAILURE_EN.
+
+**Values:**
+
+- `0`: Disabled
+- `1`: AUX1
+- `2`: AUX2
+- `3`: AUX3
+- `4`: AUX4
+- `5`: AUX5
+- `6`: AUX6
+
+| Reboot  | minValue | maxValue | increment | default | unit | Read-Only |
+| ------- | -------- | -------- | --------- | ------- | ---- | --------- |
+| &check; | 0        | 6        |           | 0       |      | &nbsp;    |
+
+### SYS_FAIL_RC_UNIT (`INT32`) {#SYS_FAIL_RC_UNIT}
+
+Component failed by the RC switch.
+
+Which component the SYS_FAIL_RC_SRC trigger fails, with SYS_FAIL_RC_MODE on
+SYS_FAIL_RC_INST.
+
+**Values:**
+
+- `0`: Gyro
+- `1`: Accel
+- `2`: Mag
+- `3`: Baro
+- `4`: GPS
+- `7`: Distance sensor
+- `8`: Airspeed
+- `100`: Battery
+- `101`: Motor
+
+| Reboot  | minValue | maxValue | increment | default | unit | Read-Only |
+| ------- | -------- | -------- | --------- | ------- | ---- | --------- |
+| &check; |          |          |           | 101     |      | &nbsp;    |
 
 ## Flight Task Orbit
 
@@ -40894,7 +40972,7 @@ Eagle Tree airspeed sensor (external I2C).
 
 ### SENS_EN_GPSSIM (`INT32`) {#SENS_EN_GPSSIM}
 
-Enable simulated GPS sinstance.
+Enable simulated GPS instance.
 
 **Values:**
 
@@ -43899,7 +43977,7 @@ It represents the difficulty of the vehicle to modify its angular rate.
 
 First order drag coefficient.
 
-Physical coefficient representing the friction with air particules.
+Physical coefficient representing the friction with air particles.
 The greater this value, the slower the quad will move.
 
 Drag force function of velocity: D=-KDV*V.
@@ -43913,7 +43991,7 @@ The maximum freefall velocity can be computed as V=10*MASS/KDV [m/s]
 
 First order angular damper coefficient.
 
-Physical coefficient representing the friction with air particules during rotations.
+Physical coefficient representing the friction with air particles during rotations.
 The greater this value, the slower the quad will rotate.
 
 Aerodynamic moment function of body rate: Ma=-KDW\*W_B.
@@ -46682,9 +46760,12 @@ UAVCAN CAN bus bitrate.
 
 UAVCAN CAN node ID (0 for dynamic allocation).
 
-| Reboot | minValue | maxValue | increment | default | unit | Read-Only |
-| ------ | -------- | -------- | --------- | ------- | ---- | --------- |
-| &nbsp; | 0        | 127      |           | 0       |      | &nbsp;    |
+Set to 0 (default) to use dynamic node ID allocation (DNA).
+Set to 1-125 to use a static node ID, which must be unique on the bus.
+
+| Reboot  | minValue | maxValue | increment | default | unit | Read-Only |
+| ------- | -------- | -------- | --------- | ------- | ---- | --------- |
+| &check; | 0        | 125      |           | 0       |      | &nbsp;    |
 
 ### CANNODE_PT_SENS (`INT32`) {#CANNODE_PT_SENS}
 
@@ -47579,7 +47660,7 @@ Yaw differential gain.
 
 ### UUV_YAW_P (`FLOAT`) {#UUV_YAW_P}
 
-Yawh proportional gain.
+Yaw proportional gain.
 
 | Reboot | minValue | maxValue | increment | default | unit | Read-Only |
 | ------ | -------- | -------- | --------- | ------- | ---- | --------- |
