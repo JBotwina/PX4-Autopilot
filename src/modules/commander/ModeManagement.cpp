@@ -368,7 +368,8 @@ void ModeManagement::checkUnregistrations(uint8_t user_intended_nav_state, Updat
 	}
 }
 
-void ModeManagement::update(uint8_t vehicle_type, bool armed, uint8_t user_intended_nav_state, UpdateRequest &update_request)
+void ModeManagement::update(uint8_t vehicle_type, bool armed, uint8_t user_intended_nav_state,
+			    uint8_t active_nav_state, UpdateRequest &update_request)
 {
 	_external_checks.update();
 
@@ -414,6 +415,7 @@ void ModeManagement::update(uint8_t vehicle_type, bool armed, uint8_t user_inten
 
 	update_request.control_setpoint_update = checkConfigControlSetpointUpdates(vehicle_type);
 	checkConfigOverrides();
+	update_request.mode_status_changed = checkSetpointTimeout(armed, user_intended_nav_state, active_nav_state);
 }
 
 void ModeManagement::onUserIntendedNavStateChange(ModeChangeSource source, uint8_t user_intended_nav_state)
@@ -538,24 +540,106 @@ mode_util::SetpointType ModeManagement::getSetpointType(uint8_t nav_state)
 {
 	mode_util::SetpointType ret = Modes::Mode::kDefaultSetpointType;
 
-	const bool mode_change = (nav_state != _last_served_nav_state);
-
-	if (mode_change) {
-		if (_modes.valid(_last_served_nav_state)) {
-			// Reset the setpoint type for the deactivated mode
-			Modes::Mode &mode = _modes.mode(_last_served_nav_state);
-			mode.current_setpoint_type = Modes::Mode::kDefaultSetpointType;
-		}
-
-		_last_served_nav_state = nav_state;
-	}
-
 	if (_modes.valid(nav_state)) {
 		const Modes::Mode &mode = _modes.mode(nav_state);
 		ret = mode.current_setpoint_type;
 	}
 
 	return ret;
+}
+
+uint8_t ModeManagement::externalModeForIntention(uint8_t user_intended_nav_state) const
+{
+	if (_modes.valid(user_intended_nav_state)) {
+		return user_intended_nav_state;
+	}
+
+	for (uint8_t nav_state = Modes::FIRST_EXTERNAL_NAV_STATE; nav_state <= Modes::LAST_EXTERNAL_NAV_STATE; ++nav_state) {
+		if (_modes.valid(nav_state) && _modes.mode(nav_state).replaces_nav_state == user_intended_nav_state) {
+			return nav_state;
+		}
+	}
+
+	return vehicle_status_s::NAVIGATION_STATE_MAX;
+}
+
+void ModeManagement::resetSetpointConfiguration(uint8_t nav_state)
+{
+	if (_modes.valid(nav_state)) {
+		Modes::Mode &mode = _modes.mode(nav_state);
+		mode.current_setpoint_type = Modes::Mode::kDefaultSetpointType;
+		mode.setpoint_timeout_ms = 0;
+	}
+}
+
+bool ModeManagement::checkSetpointTimeout(bool armed, uint8_t user_intended_nav_state, uint8_t active_nav_state)
+{
+	const uint8_t external_nav_state = externalModeForIntention(user_intended_nav_state);
+	bool status_changed = false;
+
+	if (_last_user_intended_external_mode != external_nav_state) {
+		resetSetpointConfiguration(_last_user_intended_external_mode);
+		_last_user_intended_external_mode = external_nav_state;
+		_setpoint_timed_out = false;
+	}
+
+	const bool configured = _modes.valid(external_nav_state)
+				&& _modes.mode(external_nav_state).setpoint_timeout_ms > 0;
+	const bool active = active_nav_state == external_nav_state;
+	const bool enabled = armed && configured && active;
+
+	// Keep a real timeout latched through the failsafe that it triggers. If another failsafe deactivates the mode
+	// first, the watchdog is disabled below and gets a new grace period when the mode becomes active again.
+	if (_setpoint_timed_out && armed && !active) {
+		return status_changed;
+	}
+
+	if (!enabled) {
+		if (_modes.valid(_setpoint_watchdog_nav_state)) {
+			status_changed |= _external_checks.setSetpointTimedOut(
+						  _modes.mode(_setpoint_watchdog_nav_state).arming_check_registration_id, false);
+		}
+
+		_setpoint_watchdog.disable();
+		_setpoint_watchdog_nav_state = vehicle_status_s::NAVIGATION_STATE_MAX;
+		_setpoint_watchdog_type = mode_util::SetpointType::Invalid;
+		_setpoint_watchdog_timeout_ms = 0;
+		_setpoint_timed_out = false;
+		return status_changed;
+	}
+
+	Modes::Mode &mode = _modes.mode(external_nav_state);
+	const bool configuration_changed = _setpoint_watchdog_nav_state != external_nav_state
+					   || _setpoint_watchdog_type != mode.current_setpoint_type
+					   || _setpoint_watchdog_timeout_ms != mode.setpoint_timeout_ms;
+
+	if (configuration_changed) {
+		if (_modes.valid(_setpoint_watchdog_nav_state)) {
+			status_changed |= _external_checks.setSetpointTimedOut(
+						  _modes.mode(_setpoint_watchdog_nav_state).arming_check_registration_id, false);
+		}
+
+		_setpoint_watchdog.reset(hrt_absolute_time());
+		_setpoint_watchdog_nav_state = external_nav_state;
+		_setpoint_watchdog_type = mode.current_setpoint_type;
+		_setpoint_watchdog_timeout_ms = mode.setpoint_timeout_ms;
+		_setpoint_timed_out = false;
+	}
+
+	const hrt_abstime now = hrt_absolute_time();
+	const bool timed_out = _setpoint_watchdog.timedOut(_setpoint_watchdog_type,
+			       _setpoint_watchdog_timeout_ms, now);
+
+	if (timed_out != _setpoint_timed_out) {
+		_setpoint_timed_out = timed_out;
+		status_changed |= _external_checks.setSetpointTimedOut(mode.arming_check_registration_id, timed_out);
+
+		if (timed_out) {
+			PX4_WARN("External mode %u setpoint timed out", external_nav_state);
+		}
+	}
+
+	return status_changed;
 }
 
 void ModeManagement::printStatus() const
@@ -638,6 +722,7 @@ bool ModeManagement::checkConfigControlSetpointUpdates(uint8_t vehicle_type)
 
 				if (setpoint_config.should_apply) {
 					mode.current_setpoint_type = setpoint_type;
+					mode.setpoint_timeout_ms = setpoint_config.timeout_ms;
 					had_update = true;
 				}
 			}

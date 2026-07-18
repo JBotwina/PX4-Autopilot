@@ -2594,13 +2594,13 @@ void Commander::modeManagementUpdate()
 {
 	ModeManagement::UpdateRequest mode_management_update{};
 	_mode_management.update(_vehicle_status.vehicle_type, isArmed(), _vehicle_status.nav_state_user_intention,
-				mode_management_update);
+				_vehicle_status.nav_state, mode_management_update);
 
 	if (!isArmed() && mode_management_update.change_user_intended_nav_state) {
 		_user_mode_intention.change(mode_management_update.user_intended_nav_state);
 	}
 
-	if (mode_management_update.control_setpoint_update) {
+	if (mode_management_update.control_setpoint_update || mode_management_update.mode_status_changed) {
 		_status_changed = true;
 	}
 }

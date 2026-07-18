@@ -50,6 +50,7 @@
 #include "UserModeIntention.hpp"
 #include "HealthAndArmingChecks/checks/externalChecks.hpp"
 #include "ModeUtil/setpoint_types.hpp"
+#include "ModeUtil/setpoint_watchdog.hpp"
 
 class ModeExecutors
 {
@@ -100,6 +101,7 @@ public:
 		bool request_offboard_setpoints{false};
 		config_overrides_s overrides{};
 		mode_util::SetpointType current_setpoint_type{kDefaultSetpointType};
+		uint16_t setpoint_timeout_ms{0};
 	};
 
 	void printStatus() const;
@@ -129,9 +131,11 @@ public:
 		bool change_user_intended_nav_state{false};
 		uint8_t user_intended_nav_state{};
 		bool control_setpoint_update{false};
+		bool mode_status_changed{false};
 	};
 
-	void update(uint8_t vehicle_type, bool armed, uint8_t user_intended_nav_state, UpdateRequest &update_request);
+	void update(uint8_t vehicle_type, bool armed, uint8_t user_intended_nav_state, uint8_t active_nav_state,
+		    UpdateRequest &update_request);
 	void setFailsafeState(bool failsafe_action_active)
 	{
 		_failsafe_action_active = failsafe_action_active;
@@ -168,6 +172,9 @@ public:
 
 private:
 	bool checkConfigControlSetpointUpdates(uint8_t vehicle_type);
+	bool checkSetpointTimeout(bool armed, uint8_t user_intended_nav_state, uint8_t active_nav_state);
+	uint8_t externalModeForIntention(uint8_t user_intended_nav_state) const;
+	void resetSetpointConfiguration(uint8_t nav_state);
 	void checkNewRegistrations(UpdateRequest &update_request);
 	void checkUnregistrations(uint8_t user_intended_nav_state, UpdateRequest &update_request);
 	void checkConfigOverrides();
@@ -192,7 +199,12 @@ private:
 
 	bool _invalid_mode_printed{false};
 
-	uint8_t _last_served_nav_state{0xff};
+	mode_util::SetpointWatchdog _setpoint_watchdog;
+	uint8_t _setpoint_watchdog_nav_state{vehicle_status_s::NAVIGATION_STATE_MAX};
+	mode_util::SetpointType _setpoint_watchdog_type{mode_util::SetpointType::Invalid};
+	uint16_t _setpoint_watchdog_timeout_ms{0};
+	bool _setpoint_timed_out{false};
+	uint8_t _last_user_intended_external_mode{vehicle_status_s::NAVIGATION_STATE_MAX};
 };
 
 #else /* CONSTRAINED_FLASH */
@@ -207,9 +219,11 @@ public:
 		bool change_user_intended_nav_state{false};
 		uint8_t user_intended_nav_state{};
 		bool control_setpoint_update{false};
+		bool mode_status_changed{false};
 	};
 
-	void update(uint8_t vehicle_type, bool armed, uint8_t user_intended_nav_state, UpdateRequest &update_request) {}
+	void update(uint8_t vehicle_type, bool armed, uint8_t user_intended_nav_state, uint8_t active_nav_state,
+		    UpdateRequest &update_request) {}
 	void setFailsafeState(bool failsafe_action_active) {}
 
 	int modeExecutorInCharge() const { return ModeExecutors::AUTOPILOT_EXECUTOR_ID; }
