@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PX4 Swarm Logging Map</title>
+  <style>
+    :root { color-scheme: light; --ink:#18242b; --muted:#5f6f76; --line:#d9e1e4; --accent:#0a6e73; --paper:#fbfcfa; --code:#eef3f2; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    main { max-width:960px; margin:auto; padding:48px 30px 80px; }
+    h1 { font:700 36px/1.1 ui-serif,Georgia,serif; margin:0 0 8px; }
+    h2 { font:700 22px/1.2 ui-serif,Georgia,serif; margin:38px 0 14px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+    p, li { max-width:78ch; }
+    .lead { color:var(--muted); font-size:17px; }
+    .flow { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; align-items:stretch; margin:24px 0; }
+    .box { border:1px solid var(--line); border-radius:8px; padding:14px; background:white; }
+    .arrow { color:var(--accent); font-weight:700; }
+    table { border-collapse:collapse; width:100%; background:white; }
+    th, td { border:1px solid var(--line); padding:9px 11px; text-align:left; vertical-align:top; }
+    th { background:#edf4f3; }
+    code { background:var(--code); padding:.1em .3em; border-radius:3px; }
+    pre { background:#172329; color:#eaf4f2; padding:16px; border-radius:8px; overflow:auto; font-size:13px; }
+    .warn { border-left:4px solid #bb6b16; padding:10px 14px; background:#fff8ed; }
+    a { color:var(--accent); }
+    @media (max-width:760px) { .flow { grid-template-columns:1fr; } }
+    @media print { main { padding:20px; } .box, table, pre { break-inside:avoid; } }
+  </style>
+</head>
+<body><main>
+  <h1>PX4 swarm logging map</h1>
+  <p class="lead">The shortest path to a swarm logger is a fleet-aware collector around PX4's existing ULog-over-MAVLink stream.</p>
+
+  <div class="flow" aria-label="logging data flow">
+    <div class="box"><b>Module</b><br>publishes typed uORB record</div>
+    <div class="box"><span class="arrow">→</span> <b>Logger</b><br>subscribes and serializes ULog</div>
+    <div class="box"><span class="arrow">→</span> <b>LogWriter</b><br>fans out one byte stream</div>
+    <div class="box"><span class="arrow">→</span> <b>SD / MAVLink</b><br>stores or transports it</div>
+    <div class="box"><span class="arrow">→</span> <b>Collector</b><br>keys state by source SYSID</div>
+  </div>
+
+  <h2>Extension decision</h2>
+  <table>
+    <tr><th>Need</th><th>Extension point</th><th>Recommendation</th></tr>
+    <tr><td>Record new swarm state</td><td>Custom <code>.msg</code> + uORB publication + topic selection</td><td>Yes</td></tr>
+    <tr><td>Collect complete live logs</td><td>Offboard MAVLink ULog collector</td><td>Yes, start here</td></tr>
+    <tr><td>Add a third onboard destination</td><td><code>LogWriter</code> backend</td><td>Only when SD/MAVLink cannot satisfy the transport</td></tr>
+    <tr><td>Send a few live swarm metrics</td><td>Normal MAVLink stream or DDS</td><td>Prefer over full ULog streaming on a narrow radio</td></tr>
+  </table>
+
+  <h2>Minimal typed record</h2>
+  <pre><code># msg/SwarmLog.msg
+uint64 timestamp
+uint64 timestamp_sample
+uint32 swarm_epoch
+uint16 formation_id
+uint8 role
+uint8 neighbor_count
+float32 min_neighbor_distance_m
+float32 consensus_error
+uint32 command_sequence</code></pre>
+  <pre><code>// In the swarm module
+uORB::Publication&lt;swarm_log_s&gt; _swarm_log_pub{ORB_ID(swarm_log)};
+
+swarm_log_s record{};
+record.timestamp_sample = measurement_time;
+record.timestamp = hrt_absolute_time();
+record.swarm_epoch = swarm_epoch;
+record.formation_id = formation_id;
+record.role = role;
+record.command_sequence = command_sequence;
+_swarm_log_pub.publish(record);</code></pre>
+  <pre><code># /fs/microsd/etc/logging/logger_topics.txt
+swarm_log 100</code></pre>
+
+  <h2>Fleet collector invariants</h2>
+  <ul>
+    <li>Every vehicle has a unique <code>MAV_SYS_ID</code>; use the inbound MAVLink header source, not the payload target, as the stream identity.</li>
+    <li>Maintain sequence number, partial ULog message, file handle, and counters independently per vehicle.</li>
+    <li>Acknowledge every <code>LOGGING_DATA_ACKED</code>, including duplicates.</li>
+    <li>Use <code>first_message_offset</code> after loss to recover at the next ULog message boundary.</li>
+    <li>Write one ordinary <code>.ulg</code> per vehicle; keep fleet indexes and clock transforms in a separate manifest.</li>
+    <li>Align clocks with GPS UTC or measured time-sync offsets, never by packet arrival time alone.</li>
+  </ul>
+
+  <p class="warn"><b>Important:</b> PX4 makes the ULog definitions/header reliable, but live data normally uses unacknowledged <code>LOGGING_DATA</code>. Wireless loss is expected and must remain observable.</p>
+
+  <h2>Primary source trail</h2>
+  <ul>
+    <li><a href="../../src/modules/logger/logger.cpp">logger.cpp</a> — subscriptions, formats, records, metadata</li>
+    <li><a href="../../src/modules/logger/log_writer.cpp">log_writer.cpp</a> — backend fan-out</li>
+    <li><a href="../../src/modules/logger/log_writer_mavlink.cpp">log_writer_mavlink.cpp</a> — ULog chunking and ACK handoff</li>
+    <li><a href="../../src/modules/mavlink/mavlink_ulog.cpp">mavlink_ulog.cpp</a> — MAVLink packets and rate limiting</li>
+    <li><a href="../../Tools/mavlink_ulog_streaming.py">mavlink_ulog_streaming.py</a> — working single-vehicle collector</li>
+  </ul>
+</main></body></html>

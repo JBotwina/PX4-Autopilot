@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PX4 Curriculum — Lesson Contents</title>
+  <style>
+    :root {
+      color-scheme:light dark;
+      --paper:#f5f4ef; --ink:#192526; --muted:#637172; --line:#cbd3d1;
+      --panel:#fffefa; --soft:#eaf0ed; --accent:#176f78; --accent-soft:#dcecea;
+      --later:#845a2d; --shadow:0 14px 38px rgba(31,48,49,.08);
+    }
+    @media (prefers-color-scheme:dark) {
+      :root {
+        --paper:#111716; --ink:#eef4f1; --muted:#a9b6b3; --line:#41504d;
+        --panel:#19221f; --soft:#222e2b; --accent:#67c6cf; --accent-soft:#183537;
+        --later:#e2af74; --shadow:none;
+      }
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--paper); font:16px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    main { max-width:1080px; margin:auto; padding:52px 27px 88px; }
+    h1,h2,h3 { font-family:ui-serif,Georgia,serif; line-height:1.15; }
+    h1 { max-width:760px; margin:7px 0 12px; font-size:clamp(38px,6vw,58px); font-weight:600; }
+    h2 { margin:48px 0 14px; font-size:29px; }
+    h3 { margin:0 0 6px; font-size:21px; }
+    p { max-width:75ch; }
+    a { color:var(--accent); }
+    code { padding:.08em .3em; border-radius:4px; background:var(--soft); }
+    .kicker { color:var(--muted); font-size:12px; font-weight:750; letter-spacing:.09em; text-transform:uppercase; }
+    .intro { max-width:780px; color:var(--muted); font-size:18px; }
+    .actions { display:flex; flex-wrap:wrap; gap:10px; margin:23px 0 7px; }
+    .button { display:inline-block; padding:10px 14px; color:var(--panel); background:var(--accent); border:1px solid var(--accent); border-radius:8px; font-weight:700; text-decoration:none; }
+    .button.secondary { color:var(--ink); background:var(--soft); border-color:var(--line); }
+    .summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:13px; margin:27px 0; }
+    .metric { padding:15px; border:1px solid var(--line); border-radius:11px; background:var(--panel); }
+    .metric strong { display:block; font:700 28px/1.1 ui-serif,Georgia,serif; color:var(--accent); }
+    .metric span { color:var(--muted); font-size:13px; }
+    .lessons { display:grid; gap:14px; }
+    .lesson { display:grid; grid-template-columns:65px minmax(0,1fr) minmax(190px,.65fr) auto; gap:17px; align-items:center; padding:18px; border:1px solid var(--line); border-radius:13px; background:var(--panel); box-shadow:var(--shadow); }
+    .number { display:grid; place-items:center; width:50px; height:50px; border-radius:50%; color:var(--panel); background:var(--accent); font:750 18px ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .lesson p { margin:0; color:var(--muted); }
+    .placement { padding-left:15px; border-left:1px solid var(--line); }
+    .placement strong,.placement span { display:block; }
+    .placement span { color:var(--muted); font-size:13px; }
+    .open { white-space:nowrap; font-weight:750; text-decoration:none; }
+    .later { border-left:4px solid var(--later); }
+    .later .number { background:var(--later); }
+    .notice { padding:15px 17px; border-left:4px solid var(--later); background:var(--soft); }
+    .links { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:13px; }
+    .link-card { padding:16px; border:1px solid var(--line); border-radius:11px; background:var(--panel); }
+    .link-card p { margin:4px 0 0; color:var(--muted); }
+    .path { margin-top:30px; padding:17px; overflow:auto; background:var(--soft); border-radius:10px; font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    @media (max-width:800px) {
+      .lesson { grid-template-columns:55px 1fr auto; }
+      .placement { grid-column:2 / -1; padding:10px 0 0; border-top:1px solid var(--line); border-left:0; }
+    }
+    @media (max-width:600px) {
+      main { padding:35px 17px 64px; }
+      .summary,.links { grid-template-columns:1fr; }
+      .lesson { grid-template-columns:50px 1fr; }
+      .open { grid-column:2; }
+      .placement { grid-column:1 / -1; }
+    }
+    @media print {
+      :root { --paper:#fff; --panel:#fff; --ink:#000; --muted:#444; --line:#aaa; --soft:#f3f3f3; --shadow:none; }
+      main { max-width:none; padding:0; }
+      .button { color:#000; background:#fff; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <div class="kicker">PX4 learning program · table of contents</div>
+  <h1>Lessons, in the order you actually use them</h1>
+  <p class="intro">Use this page to move among interactive lessons. The lesson supplies the acquisition portion of a curriculum block; the calculations, source trace, SITL experiment, and written explanation in the curriculum complete the block.</p>
+  <div class="actions">
+    <a class="button" href="0001-frames-before-quaternions.html">Start Lesson 0001 →</a>
+    <a class="button secondary" href="../0001-quaternions-and-px4-odometry-week.md">Open Week 1 curriculum</a>
+    <a class="button secondary" href="../README.md">Program overview</a>
+  </div>
+
+  <div class="summary" aria-label="Program summary">
+    <div class="metric"><strong>4</strong><span>interactive lessons used during Week 1</span></div>
+    <div class="metric"><strong>40 h</strong><span>quaternion and SLAM/odometry curriculum</span></div>
+    <div class="metric"><strong>1</strong><span>later swarm-logging roadmap</span></div>
+  </div>
+
+  <h2>Week 1 · Quaternions and odometry</h2>
+  <div class="lessons">
+    <article class="lesson">
+      <div class="number">0001</div>
+      <div><h3>Frames Before Quaternions</h3><p>Predict vehicle-relative gimbal yaw from an earth-frame target and explain the frame bug geometrically.</p></div>
+      <div class="placement"><strong>Day 1 · Orientation</strong><span>Prerequisite: none</span></div>
+      <a class="open" href="0001-frames-before-quaternions.html">Open →</a>
+    </article>
+    <article class="lesson">
+      <div class="number">0002</div>
+      <div><h3>The PX4 Odometry Contract</h3><p>Interpret measurement, frame, capture time, uncertainty, invalid values, and reset continuity.</p></div>
+      <div class="placement"><strong>Day 1 · Odometry</strong><span>Helpful: Lesson 0001</span></div>
+      <a class="open" href="0002-px4-odometry-contract.html">Open →</a>
+    </article>
+    <article class="lesson">
+      <div class="number">0003</div>
+      <div><h3>Quaternions as Rotations</h3><p>Build, invert, and compose quaternions while tracking the frames that each rotation maps.</p></div>
+      <div class="placement"><strong>Day 2 · Orientation</strong><span>Prerequisite: Lesson 0001</span></div>
+      <a class="open" href="0003-quaternions-as-rotations.html">Open →</a>
+    </article>
+    <article class="lesson">
+      <div class="number">0004</div>
+      <div><h3>Gimbal Lock and Quaternions</h3><p>See an Euler coordinate singularity and distinguish it from a lost physical orientation.</p></div>
+      <div class="placement"><strong>Day 3 · Orientation</strong><span>Prerequisite: Lesson 0003</span></div>
+      <a class="open" href="0004-gimbal-lock-and-quaternions.html">Open →</a>
+    </article>
+  </div>
+
+  <h2>Later curriculum · Systems and logging</h2>
+  <p class="notice"><strong>Lesson 0005 is not part of Week 1.</strong> Skim it as a roadmap at the beginning of the logging week, then return for its two-vehicle experiment after learning modules, uORB, ULog, and MAVLink streaming.</p>
+  <div class="lessons">
+    <article class="lesson later">
+      <div class="number">0005</div>
+      <div><h3>Trace PX4 Logging for a Swarm</h3><p>Follow a sample through uORB, ULog serialization, MAVLink transport, per-vehicle state, and clock alignment.</p></div>
+      <div class="placement"><strong>Week A · Roadmap and capstone</strong><span>Use with Curriculum 0002</span></div>
+      <a class="open" href="0005-trace-px4-logging-for-a-swarm.html">Open →</a>
+    </article>
+  </div>
+
+  <h2>Curricula and quick references</h2>
+  <div class="links">
+    <div class="link-card"><h3><a href="../0001-quaternions-and-px4-odometry-week.md">Curriculum 0001</a></h3><p>Five days and 40 hours of frames, quaternion rotation, SLAM concepts, and the PX4 odometry contract.</p></div>
+    <div class="link-card"><h3><a href="../0002-px4-systems-debugging-2.5-weeks.md">Curriculum 0002</a></h3><p>One hundred hours of modules, uORB, logging, MAVLink, Commander, Navigator, SITL, and testing.</p></div>
+    <div class="link-card"><h3><a href="../reference/lesson-0001-px4-listener-cheat-sheet.html">Lesson 0001 listeners</a></h3><p>Copy-ready PX4 console commands for tracing vehicle attitude, gimbal commands, and gimbal results.</p></div>
+    <div class="link-card"><h3><a href="../reference/gimbal-frame-math-cheat-sheet.html">Gimbal frame math</a></h3><p>Compact earth-frame versus vehicle-frame yaw conversion reference.</p></div>
+    <div class="link-card"><h3><a href="../reference/quaternion-rotation-cheat-sheet.html">Quaternion rotation</a></h3><p>PX4 conventions, composition, inverse, and frame-ledger reminders.</p></div>
+    <div class="link-card"><h3><a href="../reference/gimbal-lock-cheat-sheet.html">Gimbal lock</a></h3><p>Euler singularity recognition and quaternion comparison guidance.</p></div>
+    <div class="link-card"><h3><a href="../reference/px4-swarm-logging-map.html">Swarm logging map</a></h3><p>Logger, backend, MAVLink ULog transport, and fleet-collector boundaries.</p></div>
+  </div>
+
+  <div class="path" aria-label="Recommended study path">0001 Frames ─┬─→ 0002 Odometry contract
+             └─→ 0003 Quaternion rotation → 0004 Gimbal lock
+
+Later: modules + uORB + ULog + MAVLink → 0005 Swarm logging capstone</div>
+</main>
+</body>
+</html>

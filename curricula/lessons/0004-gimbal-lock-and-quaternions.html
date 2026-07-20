@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gimbal Lock and Quaternions — PX4 Orientation Math</title>
+  <style>
+    :root {
+      color-scheme:light dark;
+      --paper:#f8f7f4; --ink:#191f24; --muted:#626e76; --line:#ccd2d4;
+      --panel:#fff; --soft:#f0f1ed; --primary:#7051a3; --secondary:#cf7729;
+      --xaxis:#c86637; --yaxis:#25806c; --zaxis:#7051a3; --bad:#b4472f; --good:#187346;
+      --shadow:0 12px 32px rgba(36,39,48,.09);
+    }
+    @media (prefers-color-scheme:dark) {
+      :root {
+        --paper:#111517; --ink:#eef1f3; --muted:#a9b2b7; --line:#414a4f;
+        --panel:#191f22; --soft:#22282a; --primary:#b99ae5; --secondary:#f2a35e;
+        --xaxis:#f0a07c; --yaxis:#72d1b8; --zaxis:#b99ae5; --bad:#ff987d; --good:#80dda5;
+        --shadow:none;
+      }
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.62 ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    article { max-width:960px; margin:auto; padding:48px 26px 84px; }
+    h1,h2,h3 { font-family:ui-serif,Georgia,serif; line-height:1.15; }
+    h1 { max-width:790px; margin:7px 0 12px; font-size:clamp(34px,6vw,54px); font-weight:600; }
+    h2 { margin:45px 0 12px; font-size:28px; }
+    p { max-width:74ch; }
+    a { color:var(--primary); }
+    code { padding:.08em .3em; border-radius:4px; background:var(--soft); }
+    .kicker { color:var(--muted); font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+    .win { max-width:790px; padding:15px 17px; border-left:4px solid var(--primary); background:var(--soft); }
+    .equation { margin:13px 0; padding:13px 16px; overflow:auto; border-left:4px solid var(--primary); background:var(--soft); font:16px/1.72 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .warning { border-left-color:var(--secondary); }
+    .terms { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin:20px 0; }
+    .term { padding:16px; border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+    .term strong { display:block; margin-bottom:5px; }
+    .term p { margin:0; color:var(--muted); }
+    .lab { margin:25px 0 18px; padding:20px; border:1px solid var(--line); border-radius:14px; background:var(--panel); box-shadow:var(--shadow); }
+    .presets { display:flex; flex-wrap:wrap; gap:9px; margin-bottom:15px; }
+    button { padding:9px 13px; color:var(--ink); background:var(--soft); border:1px solid var(--line); border-radius:7px; font:600 14px/1.2 inherit; cursor:pointer; }
+    button:hover { border-color:var(--primary); }
+    button[aria-pressed="true"],button.selected { color:var(--panel); background:var(--primary); border-color:var(--primary); }
+    button:focus-visible,input:focus-visible,summary:focus-visible { outline:3px solid color-mix(in srgb,var(--primary) 45%,transparent); outline-offset:2px; }
+    label { display:grid; gap:6px; font-weight:600; }
+    input[type="range"] { width:100%; accent-color:var(--primary); }
+    .diagram { display:block; width:100%; }
+    .diagram text { fill:var(--ink); font:600 12px ui-sans-serif,system-ui,sans-serif; paint-order:stroke; stroke:var(--panel); stroke-width:4; stroke-linejoin:round; }
+    .diagram .panel-title { font:600 15px ui-sans-serif,system-ui,sans-serif; text-anchor:middle; }
+    .diagram .muted-label { fill:var(--muted); }
+    .guide { fill:none; stroke:var(--line); stroke-width:1.5; }
+    .neutral { stroke:var(--line); stroke-width:1; }
+    .yaw-axis { stroke:var(--zaxis); stroke-width:5; stroke-linecap:round; }
+    .roll-axis { stroke:var(--xaxis); stroke-width:5; stroke-linecap:round; }
+    .angle-arc { fill:none; stroke:var(--muted); stroke-width:2; }
+    .triad-axis { stroke-width:4; stroke-linecap:round; transition:x2 .18s ease,y2 .18s ease; }
+    .axis-x { stroke:var(--xaxis); } .axis-y { stroke:var(--yaxis); } .axis-z { stroke:var(--zaxis); }
+    .origin { fill:var(--ink); }
+    .metrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:13px; }
+    .metric { min-width:0; padding:12px; border:1px solid var(--line); border-radius:9px; background:var(--paper); }
+    .metric span { display:block; color:var(--muted); font-size:12px; }
+    .metric output { display:block; font:600 22px/1.25 ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap:anywhere; }
+    .status { min-height:1.5em; margin:11px 0 0; font-weight:600; }
+    .crossing { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; margin-top:17px; }
+    .readout { min-width:0; padding:15px; border:1px solid var(--line); border-radius:10px; background:var(--paper); }
+    .readout h3 { margin:0 0 8px; font:600 15px ui-sans-serif,system-ui,sans-serif; }
+    .readout output { display:block; min-height:3.1em; font:600 17px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap:anywhere; }
+    .smooth-track { position:relative; height:62px; margin:14px 8px 3px; border-top:2px solid var(--line); }
+    .smooth-track::before,.smooth-track::after { position:absolute; top:-24px; color:var(--muted); font-size:12px; }
+    .smooth-track::before { content:'80°'; left:0; } .smooth-track::after { content:'100°'; right:0; }
+    .lock-mark { position:absolute; left:50%; top:-11px; bottom:4px; border-left:2px dashed var(--secondary); }
+    .lock-mark span { position:absolute; top:28px; left:7px; color:var(--muted); font-size:12px; white-space:nowrap; }
+    .track-dot { position:absolute; top:-8px; width:14px; height:14px; border-radius:50%; background:var(--primary); transform:translateX(-50%); transition:left .15s ease; }
+    .quiz { padding:18px; border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+    .answers { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+    .answers button { min-height:58px; }
+    .feedback { min-height:1.6em; margin:10px 0 0; font-weight:600; }
+    details { padding:14px 16px; border:1px solid var(--line); border-radius:9px; background:var(--panel); }
+    summary { cursor:pointer; font-weight:700; }
+    .sources { color:var(--muted); font-size:14px; }
+    @media (max-width:680px) { article { padding:34px 17px 62px; } .terms,.crossing,.answers { grid-template-columns:1fr; } .lab { padding:14px; } .axis-panel { transform:none; } .comparison-panel { transform:translate(-360px,310px); } }
+    @media (max-width:430px) { .metrics { grid-template-columns:1fr; } }
+    @media (prefers-reduced-motion:reduce) { .triad-axis,.track-dot { transition:none; } }
+    @media print { :root { --paper:#fff; --panel:#fff; --ink:#000; --muted:#444; --line:#aaa; --soft:#f3f3f3; --shadow:none; } button,.quiz { display:none; } article { max-width:none; padding:0; } }
+  </style>
+</head>
+<body>
+<article>
+  <nav class="kicker" aria-label="Lesson navigation"><a href="0003-quaternions-as-rotations.html">← Previous: 0003</a> · <a href="index.html">All lessons</a> · <a href="0005-trace-px4-logging-for-a-swarm.html">Later: 0005 →</a></nav>
+  <div class="kicker">Lesson 0004 · PX4 orientation math</div>
+  <h1>Gimbal lock is a failure of coordinates, not orientation</h1>
+  <p class="win"><strong>Tangible win:</strong> after this lesson you can identify the exact moment yaw and roll stop being independent—and explain why a quaternion remains valid there.</p>
+  <p>The phrase <em>gimbal lock</em> comes from nested mechanical gimbals, but the same geometry appears when we describe attitude with three sequential Euler angles.</p>
+
+  <h2>1. Three rotations are not always three independent axes</h2>
+  <p>PX4 commonly displays attitude as roll, pitch, and yaw. Think of these as three ordered rotation instructions, not three permanent earth axes:</p>
+  <div class="terms">
+    <div class="term"><strong>Yaw → pitch → roll</strong><p>Each instruction changes the axes available to the instructions that follow it.</p></div>
+    <div class="term"><strong>The dangerous middle angle</strong><p>For the 3-2-1 sequence, pitch at ±90° makes the yaw and roll axes collinear.</p></div>
+  </div>
+  <p>When two axes lie on the same line, turning one or the other produces the same kind of motion. You have three angle labels but only two independent rotation directions.</p>
+
+  <h2>2. Move the mechanism into lock</h2>
+  <p>Move pitch toward 90°. The left picture shows the yaw axis and the vehicle's roll axis. The right picture compares two different Euler commands.</p>
+
+  <section class="lab" id="lock-lab" aria-label="Interactive gimbal lock demonstration">
+    <div class="presets" aria-label="Pitch presets">
+      <button type="button" data-lock-pitch="0">0°</button>
+      <button type="button" data-lock-pitch="60" aria-pressed="true">60°</button>
+      <button type="button" data-lock-pitch="89">89°</button>
+      <button type="button" data-lock-pitch="90">90° lock</button>
+    </div>
+    <label for="lock-pitch">Middle rotation: pitch <output id="lock-pitch-value">60°</output>
+      <input id="lock-pitch" type="range" min="0" max="90" value="60" step="1">
+    </label>
+
+    <svg class="diagram lock-diagram" viewBox="0 0 720 310" role="img" aria-labelledby="lock-title lock-desc">
+      <title id="lock-title">Euler-axis alignment and duplicate orientation comparison</title>
+      <desc id="lock-desc">As pitch approaches ninety degrees, the yaw and roll axes become collinear and two different yaw-roll commands converge to the same orientation.</desc>
+      <g class="axis-panel">
+        <text class="panel-title" x="175" y="24">Rotation axes</text>
+        <circle class="guide" cx="175" cy="160" r="104"></circle>
+        <line class="neutral" x1="62" y1="160" x2="288" y2="160"></line>
+        <line class="neutral" x1="175" y1="47" x2="175" y2="273"></line>
+        <line class="yaw-axis" x1="175" y1="254" x2="175" y2="66"></line>
+        <line class="roll-axis" id="lock-roll-axis" x1="90" y1="181" x2="260" y2="139"></line>
+        <text x="184" y="63">yaw axis</text>
+        <text id="lock-roll-label" x="265" y="136">roll axis</text>
+        <path class="angle-arc" id="lock-angle-arc" d="M175 94 A66 66 0 0 1 232 127"></path>
+        <text id="lock-angle-label" x="228" y="103">30° apart</text>
+      </g>
+      <g class="comparison-panel">
+        <text class="panel-title" x="535" y="24">Two Euler commands</text>
+        <text class="muted-label" x="425" y="53">A · yaw +20°, roll 0°</text>
+        <text class="muted-label" x="425" y="76">B · yaw 0°, roll −20°</text>
+        <g id="lock-triad-a" aria-label="Orientation A body axes"></g>
+        <g id="lock-triad-b" aria-label="Orientation B body axes"></g>
+        <text x="465" y="284" text-anchor="middle">A</text>
+        <text x="605" y="284" text-anchor="middle">B</text>
+      </g>
+    </svg>
+    <div class="metrics">
+      <div class="metric"><span>Yaw–roll axis separation</span><output id="lock-axis-gap">30°</output></div>
+      <div class="metric"><span>A–B orientation difference</span><output id="lock-orientation-gap">10.3°</output></div>
+    </div>
+    <p class="status" id="lock-status" role="status">The axes are still independent, but they are converging.</p>
+  </section>
+
+  <p>At exactly 90°, both commands produce the same attitude. Their yaw and roll values are different, but only the combination <code>roll − yaw</code> remains observable:</p>
+  <div class="equation">A: roll − yaw = 0° − 20° = −20°<br>B: roll − yaw = −20° − 0° = −20°</div>
+  <p>This is the singularity: the orientation is fine, but the map from orientation to one unique roll–pitch–yaw triple has failed.</p>
+
+  <h2>3. Why the math becomes unstable nearby</h2>
+  <p>Near 90°, the axes are almost—rather than exactly—the same. A controller trying to request a small physical rotation may need very large, opposing yaw and roll rates. In the Euler-rate equations this appears as division by <code>cos(pitch)</code>:</p>
+  <div class="equation warning">pitch → 90° &nbsp;⇒&nbsp; cos(pitch) → 0 &nbsp;⇒&nbsp; Euler rates can blow up</div>
+  <p>This does not mean the vehicle suddenly rotated infinitely fast. It means these particular coordinates are becoming a poor way to describe an ordinary motion.</p>
+
+  <h2>4. A quaternion never chooses three sequential axes</h2>
+  <p>A unit quaternion stores one axis and one angle as four constrained numbers. There is no middle Euler angle that can rotate two of its coordinate axes onto each other:</p>
+  <div class="equation">q = [ cos(θ/2), axis · sin(θ/2) ]<br>w² + x² + y² + z² = 1</div>
+  <p>The extra number is not an extra physical degree of freedom. The unit-length constraint removes it. That redundancy lets quaternions cover every 3D orientation without an Euler-style singular point.</p>
+
+  <h2>5. Cross 90° without stopping</h2>
+  <p>Scrub a smooth physical pitch through 90°. The quaternion changes continuously. A conventional Euler readout must become ambiguous and then switch to a different—but equivalent—set of angle labels.</p>
+
+  <section class="lab" id="crossing-lab" aria-label="Quaternion crossing the Euler singularity">
+    <div class="presets" aria-label="Crossing presets">
+      <button type="button" data-cross-pitch="85">85°</button>
+      <button type="button" data-cross-pitch="90" aria-pressed="true">90°</button>
+      <button type="button" data-cross-pitch="95">95°</button>
+    </div>
+    <label for="cross-pitch">Physical pitch <output id="cross-pitch-value">90°</output>
+      <input id="cross-pitch" type="range" min="80" max="100" value="90" step="1">
+    </label>
+    <div class="smooth-track" aria-hidden="true">
+      <div class="lock-mark"><span>Euler singularity</span></div>
+      <div class="track-dot" id="cross-dot" style="left:50%"></div>
+    </div>
+    <div class="crossing">
+      <div class="readout"><h3>Quaternion state — continuous</h3><output id="cross-quaternion">[0.707, 0, 0.707, 0]</output></div>
+      <div class="readout"><h3>Euler labels — ambiguous here</h3><output id="cross-euler">roll = any matching value<br>pitch = 90°<br>yaw = coupled to roll</output></div>
+    </div>
+    <p class="status" id="cross-status" role="status">The orientation is valid. Only the Euler naming is non-unique.</p>
+  </section>
+
+  <h2>6. What quaternions do—and do not—save</h2>
+  <div class="terms">
+    <div class="term"><strong>They do save the attitude representation</strong><p>PX4 can estimate, integrate, compare, and compose orientation without encountering an Euler coordinate singularity.</p></div>
+    <div class="term"><strong>They do not save a locked mechanism</strong><p>If two physical gimbal axes align, software cannot invent the missing actuator direction. Joint limits and cable wrap also remain real.</p></div>
+  </div>
+  <p>Converting a healthy quaternion back to Euler angles can also reintroduce the jump. That is why an odd roll–pitch–yaw display near ±90° is not, by itself, evidence that the quaternion or physical attitude jumped.</p>
+
+  <h2>7. Apply this distinction to PX4</h2>
+  <p>PX4 stores vehicle attitude as a Hamilton quaternion that rotates body FRD into earth NED. That state remains usable at every vehicle pitch. Modules may still convert it to Euler angles for displays or real joint commands, where sequence conventions and physical constraints matter again.</p>
+  <div class="equation">quaternion state → nonsingular orientation math<br>Euler readout → convenient local labels<br>gimbal joints → actual mechanical constraints</div>
+
+  <h2>8. Retrieve the core idea</h2>
+  <div class="quiz" id="lock-quiz">
+    <p>At 90° pitch, the vehicle still has a valid orientation. What actually failed?</p>
+    <div class="answers">
+      <button type="button" data-answer="wrong">Vehicle motion becomes impossible</button>
+      <button type="button" data-answer="right">Euler labels become ambiguous</button>
+      <button type="button" data-answer="wrong">Quaternion values become infinite</button>
+    </div>
+    <p class="feedback" id="lock-feedback" role="status"></p>
+  </div>
+
+  <h2>One careful wording</h2>
+  <details>
+    <summary>Should I say “quaternions prevent gimbal lock”?</summary>
+    <p>For software attitude representation, that shorthand is common: quaternions avoid the Euler-angle singularity called gimbal lock. More precisely, they do not prevent physical gimbal axes from aligning; they prevent the orientation state from being expressed through a singular three-angle coordinate chart.</p>
+  </details>
+
+  <h2>9. PX4 source exercise</h2>
+  <div class="quiz">
+    <p><strong>Goal:</strong> observe where PX4's quaternion remains smooth while an Euler conversion reaches its singular coordinate chart.</p>
+    <ol>
+      <li>Open <a href="../../src/lib/matrix/matrix/Euler.hpp"><code>Euler.hpp</code></a> and locate the constructor from a quaternion. Follow its conversion through <a href="../../src/lib/matrix/matrix/Dcm.hpp"><code>Dcm.hpp</code></a>.</li>
+      <li>Open <a href="../../src/lib/matrix/matrix/Quaternion.hpp"><code>Quaternion.hpp</code></a>. Record why the underlying quaternion operations do not require a yaw–pitch–roll sequence.</li>
+      <li>Using PX4 matrix types, generate pure-pitch quaternions from <code>80°</code> through <code>100°</code>. Convert each to <code>Eulerf</code> and also rotate the body-forward vector.</li>
+      <li>Before running the test, predict which output may jump and which physical vector should move continuously. Verify, then explain why an Euler jump is not sufficient evidence of a vehicle-attitude jump.</li>
+    </ol>
+    <p><strong>Evidence to keep:</strong> the tested angle table, Euler outputs, rotated-vector outputs, and the source branches responsible for the reported Euler representation.</p>
+  </div>
+
+  <h2>Keep nearby</h2>
+  <p>Review <a href="0003-quaternions-as-rotations.html">lesson 0003</a> for axis-angle encoding and multiplication. Use the <a href="../reference/gimbal-lock-cheat-sheet.html">gimbal-lock cheat sheet</a> when interpreting PX4 attitude displays.</p>
+  <p class="sources">Primary sources: <a href="https://ntrs.nasa.gov/citations/20180003657">NASA Navigation Filter Best Practices</a> derives the Euler-axis collinearity; <a href="https://ntrs.nasa.gov/citations/19990110711">NASA Spacecraft Attitude Representations</a> compares Euler and quaternion coordinates; <a href="../../src/lib/matrix/matrix/Quaternion.hpp">PX4 Quaternion.hpp</a> documents PX4's nonsingular quaternion operations. Ask your agent if “the orientation is valid but the coordinates failed” still feels counterintuitive.</p>
+</article>
+
+<script>
+(() => {
+  const rad = degrees => degrees * Math.PI / 180;
+  const clamp = value => Math.max(-1, Math.min(1, value));
+  const eulerQuaternion = (roll, pitch, yaw) => {
+    const cr=Math.cos(rad(roll)/2), sr=Math.sin(rad(roll)/2), cp=Math.cos(rad(pitch)/2), sp=Math.sin(rad(pitch)/2), cy=Math.cos(rad(yaw)/2), sy=Math.sin(rad(yaw)/2);
+    return [cr*cp*cy+sr*sp*sy, sr*cp*cy-cr*sp*sy, cr*sp*cy+sr*cp*sy, cr*cp*sy-sr*sp*cy];
+  };
+  const quaternionGap = (a,b) => 2*Math.acos(clamp(Math.abs(a.reduce((sum,value,index)=>sum+value*b[index],0))))*180/Math.PI;
+  const rotationMatrix = (roll,pitch,yaw) => {
+    const r=rad(roll),p=rad(pitch),y=rad(yaw),cr=Math.cos(r),sr=Math.sin(r),cp=Math.cos(p),sp=Math.sin(p),cy=Math.cos(y),sy=Math.sin(y);
+    return [[cy*cp,cy*sp*sr-sy*cr,cy*sp*cr+sy*sr],[sy*cp,sy*sp*sr+cy*cr,sy*sp*cr-cy*sr],[-sp,cp*sr,cp*cr]];
+  };
+  const transform = (matrix,vector) => matrix.map(row=>row.reduce((sum,value,index)=>sum+value*vector[index],0));
+  const project = (vector,center,scale=56) => ({x:center.x+scale*(vector[0]-.5*vector[1]),y:center.y-scale*(vector[2]+.28*vector[0]+.22*vector[1])});
+  const formatComponent = value => Math.abs(value)<.0005?'0':value.toFixed(3);
+
+  const lockLab=document.getElementById('lock-lab');
+  const lockDiagram=lockLab.querySelector('.lock-diagram');
+  const lockSlider=lockLab.querySelector('#lock-pitch');
+  const lockPitchValue=lockLab.querySelector('#lock-pitch-value');
+  const rollAxis=lockLab.querySelector('#lock-roll-axis');
+  const rollLabel=lockLab.querySelector('#lock-roll-label');
+  const angleArc=lockLab.querySelector('#lock-angle-arc');
+  const angleLabel=lockLab.querySelector('#lock-angle-label');
+  const axisGap=lockLab.querySelector('#lock-axis-gap');
+  const orientationGap=lockLab.querySelector('#lock-orientation-gap');
+  const lockStatus=lockLab.querySelector('#lock-status');
+  const triadA=lockLab.querySelector('#lock-triad-a');
+  const triadB=lockLab.querySelector('#lock-triad-b');
+  const compactLayout=window.matchMedia('(max-width:680px)');
+  const updateLockLayout=()=>lockDiagram.setAttribute('viewBox',compactLayout.matches?'0 0 360 620':'0 0 720 310');
+  compactLayout.addEventListener('change',updateLockLayout);
+  updateLockLayout();
+
+  const drawTriad=(group,center,matrix)=>{
+    group.replaceChildren();
+    [{vector:[1,0,0],cls:'axis-x'},{vector:[0,1,0],cls:'axis-y'},{vector:[0,0,1],cls:'axis-z'}].forEach(axis=>{
+      const point=project(transform(matrix,axis.vector),center);
+      const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('class',`triad-axis ${axis.cls}`); line.setAttribute('x1',center.x); line.setAttribute('y1',center.y); line.setAttribute('x2',point.x); line.setAttribute('y2',point.y); group.append(line);
+    });
+    const origin=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    origin.setAttribute('class','origin'); origin.setAttribute('cx',center.x); origin.setAttribute('cy',center.y); origin.setAttribute('r','4'); group.append(origin);
+  };
+  const updateLock=()=>{
+    const pitch=Number(lockSlider.value),theta=rad(pitch),center={x:175,y:160},length=94;
+    lockPitchValue.value=`${pitch}°`;
+    const vector=[Math.cos(theta),0,-Math.sin(theta)],point=project(vector,center,length),opposite=project(vector.map(value=>-value),center,length);
+    rollAxis.setAttribute('x1',opposite.x); rollAxis.setAttribute('y1',opposite.y); rollAxis.setAttribute('x2',point.x); rollAxis.setAttribute('y2',point.y);
+    rollLabel.setAttribute('x',Math.min(300,point.x+7)); rollLabel.setAttribute('y',point.y-7);
+    const separation=90-pitch,radius=66,start=-Math.PI/2,end=start+rad(separation),sx=center.x+radius*Math.cos(start),sy=center.y+radius*Math.sin(start),ex=center.x+radius*Math.cos(end),ey=center.y+radius*Math.sin(end);
+    angleArc.setAttribute('d',`M${sx} ${sy} A${radius} ${radius} 0 0 1 ${ex} ${ey}`); angleLabel.textContent=`${separation}° apart`; angleLabel.setAttribute('x',center.x+76*Math.cos((start+end)/2)); angleLabel.setAttribute('y',center.y+76*Math.sin((start+end)/2));
+    axisGap.value=`${separation}°`;
+    const gap=quaternionGap(eulerQuaternion(0,pitch,20),eulerQuaternion(-20,pitch,0));
+    orientationGap.value=`${gap<.05?'0.0':gap.toFixed(1)}°`;
+    drawTriad(triadA,{x:465,y:205},rotationMatrix(0,pitch,20)); drawTriad(triadB,{x:605,y:205},rotationMatrix(-20,pitch,0));
+    lockStatus.textContent=pitch===90?'Locked: yaw and roll name the same axis; commands A and B are the same orientation.':pitch>=88?'Nearly locked: small orientation changes can require very large Euler-angle changes.':pitch===0?'The yaw and roll axes are perpendicular and fully independent.':'The axes are still independent, but they are converging.';
+    lockLab.querySelectorAll('[data-lock-pitch]').forEach(button=>button.setAttribute('aria-pressed',String(Number(button.dataset.lockPitch)===pitch)));
+  };
+  lockSlider.addEventListener('input',updateLock);
+  lockLab.querySelectorAll('[data-lock-pitch]').forEach(button=>button.addEventListener('click',()=>{lockSlider.value=button.dataset.lockPitch;updateLock();}));
+  updateLock();
+
+  const crossing=document.getElementById('crossing-lab');
+  const crossSlider=crossing.querySelector('#cross-pitch');
+  const crossValue=crossing.querySelector('#cross-pitch-value');
+  const crossDot=crossing.querySelector('#cross-dot');
+  const quaternionOutput=crossing.querySelector('#cross-quaternion');
+  const eulerOutput=crossing.querySelector('#cross-euler');
+  const crossStatus=crossing.querySelector('#cross-status');
+  const updateCrossing=()=>{
+    const pitch=Number(crossSlider.value),half=rad(pitch)/2,q=[Math.cos(half),0,Math.sin(half),0];
+    crossValue.value=`${pitch}°`; crossDot.style.left=`${(pitch-80)*5}%`; quaternionOutput.value=`[${q.map(formatComponent).join(', ')}]`;
+    if(pitch<90){ eulerOutput.innerHTML=`roll = 0°<br>pitch = ${pitch}°<br>yaw = 0°`; crossStatus.textContent='Both descriptions are well behaved as the vehicle approaches the singularity.'; }
+    else if(pitch===90){ eulerOutput.innerHTML='roll = any matching value<br>pitch = 90°<br>yaw = coupled to roll'; crossStatus.textContent='The orientation is valid. Only the Euler naming is non-unique.'; }
+    else { eulerOutput.innerHTML=`roll = 180°<br>pitch = ${180-pitch}°<br>yaw = 180°`; crossStatus.textContent='The quaternion changed smoothly; the Euler labels jumped to an equivalent triple.'; }
+    crossing.querySelectorAll('[data-cross-pitch]').forEach(button=>button.setAttribute('aria-pressed',String(Number(button.dataset.crossPitch)===pitch)));
+  };
+  crossSlider.addEventListener('input',updateCrossing);
+  crossing.querySelectorAll('[data-cross-pitch]').forEach(button=>button.addEventListener('click',()=>{crossSlider.value=button.dataset.crossPitch;updateCrossing();}));
+  updateCrossing();
+
+  const quiz=document.getElementById('lock-quiz'),feedback=quiz.querySelector('#lock-feedback');
+  quiz.querySelectorAll('[data-answer]').forEach(button=>button.addEventListener('click',()=>{
+    quiz.querySelectorAll('[data-answer]').forEach(candidate=>candidate.classList.toggle('selected',candidate===button));
+    feedback.textContent=button.dataset.answer==='right'?'Correct. The physical orientation exists; one unique Euler triple does not.':'Not quite. The vehicle and quaternion remain valid; the Euler coordinate labels lose uniqueness.';
+  }));
+})();
+</script>
+</body>
+</html>

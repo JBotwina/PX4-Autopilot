@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PX4 Gimbal Frame Math — Quick Reference</title>
+  <style>
+    :root { color-scheme: light dark; --paper:#fbfaf6; --ink:#182126; --muted:#58666d; --line:#c8d0d2; --soft:#eef3f2; --accent:#176b72; }
+    @media (prefers-color-scheme:dark) { :root { --paper:#111719; --ink:#edf3f3; --muted:#a9b6b8; --line:#435054; --soft:#1b2427; --accent:#76cbd0; } }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    main { max-width:900px; margin:auto; padding:36px 26px 56px; }
+    h1,h2 { font-family:ui-serif,Georgia,serif; line-height:1.15; }
+    h1 { margin:0 0 6px; font-size:34px; } h2 { margin:28px 0 10px; font-size:21px; }
+    .subtitle { color:var(--muted); margin:0 0 22px; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px 28px; }
+    .block { break-inside:avoid; }
+    .equation { background:var(--soft); border-left:4px solid var(--accent); padding:11px 14px; font:16px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    table { width:100%; border-collapse:collapse; } th,td { padding:8px 9px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:var(--muted); font-weight:600; }
+    code { background:var(--soft); padding:.08em .3em; border-radius:3px; }
+    a { color:var(--accent); }
+    .muted { color:var(--muted); }
+    @media (max-width:650px) { .grid { grid-template-columns:1fr; } main { padding:28px 18px 44px; } }
+    @media print { :root { --paper:white; --ink:black; --muted:#444; --line:#aaa; --soft:#f3f3f3; --accent:#222; } main { max-width:none; padding:0; } a { color:inherit; text-decoration:none; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>PX4 gimbal frame math</h1>
+  <p class="subtitle">One-page reference for earth yaw, vehicle-relative yaw, and the Gazebo conversion.</p>
+
+  <div class="grid">
+    <section class="block">
+      <h2>Frames</h2>
+      <table>
+        <tr><th>Frame</th><th>Horizontal axes</th><th>Yaw zero</th></tr>
+        <tr><td>Earth NED</td><td>North, East</td><td>North</td></tr>
+        <tr><td>Vehicle FRD</td><td>Forward, Right</td><td>Vehicle nose</td></tr>
+      </table>
+      <p>PX4 yaw is positive clockwise when viewed from above: north 0°, east +90°, south ±180°, west −90°.</p>
+    </section>
+
+    <section class="block">
+      <h2>Yaw-only conversion</h2>
+      <div class="equation">joint = wrap(target − vehicle)<br>actual = wrap(vehicle + joint)</div>
+      <p>For vehicle east (+90°) and target north (0°), command the joint to −90°.</p>
+    </section>
+
+    <section class="block">
+      <h2>Bug signature</h2>
+      <div class="equation">broken joint = target<br>broken actual = wrap(vehicle + target)</div>
+      <p>The earth-frame target is mistakenly sent to a vehicle-relative Gazebo joint, so vehicle heading leaks into feedback.</p>
+    </section>
+
+    <section class="block">
+      <h2>Quaternion form</h2>
+      <div class="equation">q_joint = inverse(q_vehicle) ⊗ q_target<br>q_vehicle ⊗ q_joint = q_target</div>
+      <p>Quaternion multiplication replaces angle addition in 3D. Order matters.</p>
+    </section>
+  </div>
+
+  <h2>Gimbal flags</h2>
+  <table>
+    <tr><th>Value</th><th>Name</th><th>Interpretation</th><th>Bridge action</th></tr>
+    <tr><td>32</td><td><code>YAW_IN_VEHICLE_FRAME</code></td><td>Yaw is relative to the nose</td><td>Preserve command</td></tr>
+    <tr><td>64</td><td><code>YAW_IN_EARTH_FRAME</code></td><td>Yaw is relative to north</td><td>Convert with inverse vehicle attitude</td></tr>
+    <tr><td>92</td><td>4 + 8 + 16 + 64</td><td>Roll/pitch/yaw locked; yaw explicitly earth-frame</td><td>Convert</td></tr>
+  </table>
+
+  <h2>Listener diagnosis</h2>
+  <ol>
+    <li>Read vehicle earth yaw from <code>vehicle_attitude</code>.</li>
+    <li>Read the commanded quaternion and flags from <code>gimbal_device_set_attitude</code>.</li>
+    <li>Use the flags before interpreting the commanded yaw.</li>
+    <li>Compare the earth-frame result with <code>gimbal_device_attitude_status</code>.</li>
+  </ol>
+  <p class="muted">Primary sources: <a href="https://docs.px4.io/main/en/tutorials/motion-capture#coordinate-frames">PX4 coordinate frames</a> · <a href="https://mavlink.io/en/messages/common.html#GIMBAL_DEVICE_SET_ATTITUDE">MAVLink gimbal attitude message</a> · <a href="../../msg/versioned/VehicleAttitude.msg">PX4 vehicle attitude definition</a></p>
+</main>
+</body>
+</html>

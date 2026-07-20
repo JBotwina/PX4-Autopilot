@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Frames Before Quaternions — PX4 Gimbal Math</title>
+  <style>
+    :root {
+      color-scheme:light dark;
+      --paper:#f7f8f5; --ink:#172126; --muted:#617078; --line:#cbd4d5;
+      --panel:#ffffff; --soft:#edf3f1; --vehicle:#147d89; --target:#d67a24;
+      --actual:#238a4b; --joint:#a34f8a; --bad:#b4472f; --good:#187346;
+      --shadow:0 12px 32px rgba(31,52,58,.09);
+    }
+    @media (prefers-color-scheme:dark) {
+      :root {
+        --paper:#111719; --ink:#edf4f3; --muted:#a8b7b9; --line:#405054;
+        --panel:#192124; --soft:#202c2f; --vehicle:#67c7d2; --target:#f0a257;
+        --actual:#74d593; --joint:#e297cc; --bad:#ff987d; --good:#80dda5;
+        --shadow:none;
+      }
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.62 ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    article { max-width:940px; margin:auto; padding:48px 26px 84px; }
+    h1,h2,h3 { font-family:ui-serif,Georgia,serif; line-height:1.15; }
+    h1 { max-width:720px; margin:7px 0 12px; font-size:clamp(34px,6vw,54px); font-weight:600; }
+    h2 { margin:44px 0 12px; font-size:28px; } h3 { margin:26px 0 8px; font-size:21px; }
+    p { max-width:72ch; }
+    a { color:var(--vehicle); }
+    code { padding:.08em .3em; border-radius:4px; background:var(--soft); }
+    .kicker { color:var(--muted); font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+    .win { max-width:760px; padding:15px 17px; border-left:4px solid var(--vehicle); background:var(--soft); }
+    .frames { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:15px; margin:20px 0; }
+    .frame { padding:17px; border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+    .frame strong { display:block; margin-bottom:6px; }
+    .frame p { margin:0; color:var(--muted); }
+    .equation { margin:13px 0; padding:13px 16px; overflow:auto; border-left:4px solid var(--joint); background:var(--soft); font:17px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .lab { margin:26px 0 18px; padding:20px; border:1px solid var(--line); border-radius:14px; background:var(--panel); box-shadow:var(--shadow); }
+    .lab-controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:15px 20px; }
+    label { display:grid; gap:6px; font-weight:600; }
+    input[type="range"] { width:100%; accent-color:var(--vehicle); }
+    select,input[type="number"] { width:100%; padding:9px 10px; color:var(--ink); background:var(--paper); border:1px solid var(--line); border-radius:7px; font:inherit; }
+    .switch { display:flex; align-items:center; gap:9px; align-self:end; min-height:45px; }
+    .switch input { width:19px; height:19px; accent-color:var(--good); }
+    .presets { display:flex; flex-wrap:wrap; gap:9px; margin-bottom:16px; }
+    button { padding:9px 13px; color:var(--ink); background:var(--soft); border:1px solid var(--line); border-radius:7px; font:600 14px/1.2 inherit; cursor:pointer; }
+    button:hover { border-color:var(--vehicle); }
+    button:focus-visible,input:focus-visible,select:focus-visible { outline:3px solid color-mix(in srgb,var(--vehicle) 45%,transparent); outline-offset:2px; }
+    .primary { color:var(--panel); background:var(--vehicle); border-color:var(--vehicle); }
+    .lab-stage { display:grid; grid-template-columns:minmax(0,1fr) 240px; gap:18px; align-items:center; margin-top:16px; }
+    .compass { display:block; width:100%; max-height:430px; }
+    .compass .gridline { stroke:var(--line); stroke-width:1; }
+    .compass .ring { fill:none; stroke:var(--line); stroke-width:2; }
+    .compass text { fill:var(--ink); font:600 13px ui-sans-serif,system-ui,sans-serif; paint-order:stroke; stroke:var(--panel); stroke-width:4; stroke-linejoin:round; }
+    .compass .axis { fill:var(--muted); text-anchor:middle; dominant-baseline:middle; }
+    .compass .target-ray { stroke:var(--target); stroke-width:3; stroke-dasharray:7 5; }
+    .compass .actual-ray { stroke:var(--actual); stroke-width:5; }
+    .compass .vehicle { fill:color-mix(in srgb,var(--vehicle) 25%,transparent); stroke:var(--vehicle); stroke-width:3; }
+    .compass .target-dot { fill:var(--panel); stroke:var(--target); stroke-width:4; }
+    .compass .joint-arc { fill:none; stroke:var(--joint); stroke-width:3; }
+    .metrics { display:grid; gap:10px; }
+    .metric { padding:12px 13px; border:1px solid var(--line); border-radius:9px; background:var(--paper); }
+    .metric span { display:block; color:var(--muted); font-size:12px; }
+    .metric output { display:block; font:600 27px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .status { margin:12px 0 0; font-weight:600; }
+    .status.good { color:var(--good); } .status.bad { color:var(--bad); }
+    .legend { display:flex; flex-wrap:wrap; gap:8px 17px; margin-top:9px; color:var(--muted); font-size:13px; }
+    .legend span::before { content:""; display:inline-block; width:20px; height:3px; margin-right:7px; vertical-align:middle; background:var(--vehicle); }
+    .legend .target::before { background:var(--target); }
+    .legend .actual::before { height:5px; background:var(--actual); }
+    .steps { counter-reset:lesson-step; padding:0; list-style:none; }
+    .steps li { position:relative; margin:20px 0; padding-left:45px; }
+    .steps li::before { counter-increment:lesson-step; content:counter(lesson-step); position:absolute; left:0; top:0; display:grid; place-items:center; width:30px; height:30px; border-radius:50%; color:var(--panel); background:var(--vehicle); font-weight:700; }
+    .practice { padding:18px; border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+    .practice-row { display:grid; grid-template-columns:minmax(220px,1fr) auto; gap:12px; align-items:end; }
+    .feedback { min-height:1.6em; margin:9px 0 0; font-weight:600; }
+    details { padding:14px 16px; border:1px solid var(--line); border-radius:9px; background:var(--panel); }
+    summary { cursor:pointer; font-weight:700; }
+    table { width:100%; border-collapse:collapse; margin:13px 0; }
+    th,td { padding:9px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:var(--muted); }
+    .sources { color:var(--muted); font-size:14px; }
+    @media (max-width:700px) { .lab-stage { grid-template-columns:1fr; } .metrics { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+    @media (max-width:560px) { article { padding:34px 17px 62px; } .frames,.lab-controls,.practice-row { grid-template-columns:1fr; } .metrics { grid-template-columns:1fr; } .lab { padding:14px; } th,td { padding:7px 5px; } }
+    @media print { :root { --paper:#fff; --panel:#fff; --ink:#000; --muted:#444; --line:#aaa; --soft:#f3f3f3; --shadow:none; } button,.practice { display:none; } article { max-width:none; padding:0; } }
+  </style>
+</head>
+<body>
+<article>
+  <nav class="kicker" aria-label="Lesson navigation"><a href="index.html">All lessons</a> · <a href="0002-px4-odometry-contract.html">Next: 0002 →</a></nav>
+  <div class="kicker">Lesson 0001 · PX4 orientation math</div>
+  <h1>Frames before quaternions</h1>
+  <p class="win"><strong>Tangible win:</strong> after this lesson you can predict the gimbal joint command from a vehicle heading and an earth target—and explain exactly why the Gazebo bug adds vehicle heading.</p>
+  <p>You do not need differential equations for this lesson. The first layer is compass geometry and subtraction. Quaternions arrive later because the real vehicle can roll and pitch as well as yaw.</p>
+
+  <h2>1. One angle, two possible reference points</h2>
+  <div class="frames">
+    <div class="frame"><strong>Earth frame · NED</strong><p>Yaw zero points north. East is +90°. The reference does not rotate with the vehicle.</p></div>
+    <div class="frame"><strong>Vehicle frame · FRD</strong><p>Yaw zero points through the vehicle nose. The reference rotates whenever the vehicle rotates.</p></div>
+  </div>
+  <p>The number <code>0°</code> is therefore incomplete by itself. Earth-frame <code>0°</code> means “north.” Vehicle-frame <code>0°</code> means “straight through the nose.”</p>
+
+  <h2>2. Explore the frame conversion</h2>
+  <p>Start with <strong>Issue case</strong>. The vehicle points east while the requested gimbal direction points north. Toggle the conversion and watch which arrow moves.</p>
+
+  <section class="lab" id="yaw-lab" aria-label="Interactive gimbal yaw frame lab">
+    <div class="presets">
+      <button type="button" class="primary" id="issue-preset">Issue case</button>
+      <button type="button" id="capture-preset">Your flags 32 capture</button>
+    </div>
+    <div class="lab-controls">
+      <label for="vehicle-heading">Vehicle earth heading <output id="vehicle-heading-value">+90°</output>
+        <input id="vehicle-heading" type="range" min="-180" max="180" value="90" step="1">
+      </label>
+      <label for="command-yaw">Command yaw <output id="command-yaw-value">0°</output>
+        <input id="command-yaw" type="range" min="-180" max="180" value="0" step="1">
+      </label>
+      <label for="command-frame">What is command zero measured from?
+        <select id="command-frame">
+          <option value="earth" selected>North · earth frame · flag 64</option>
+          <option value="vehicle">Vehicle nose · vehicle frame · flag 32</option>
+        </select>
+      </label>
+      <label class="switch" for="apply-conversion"><input id="apply-conversion" type="checkbox"> Apply earth-to-vehicle conversion</label>
+    </div>
+
+    <div class="lab-stage">
+      <svg class="compass" viewBox="0 0 520 430" role="img" aria-labelledby="compass-title compass-desc">
+        <title id="compass-title">Vehicle and gimbal headings on a compass</title>
+        <desc id="compass-desc">A top-down compass showing vehicle heading, requested earth heading, and actual gimbal earth heading.</desc>
+        <defs>
+          <marker id="actual-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="var(--actual)"></path></marker>
+          <marker id="joint-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="var(--joint)"></path></marker>
+        </defs>
+        <line class="gridline" x1="260" y1="25" x2="260" y2="405"></line>
+        <line class="gridline" x1="70" y1="215" x2="450" y2="215"></line>
+        <circle class="ring" cx="260" cy="215" r="170"></circle>
+        <circle class="ring" cx="260" cy="215" r="85"></circle>
+        <text class="axis" x="260" y="25">N · 0°</text><text class="axis" x="477" y="215">E · +90°</text>
+        <text class="axis" x="260" y="414">S · ±180°</text><text class="axis" x="43" y="215">W · −90°</text>
+        <line class="target-ray" id="target-ray" x1="260" y1="215" x2="260" y2="55"></line>
+        <circle class="target-dot" id="target-dot" cx="260" cy="55" r="8"></circle>
+        <text id="target-label" x="274" y="58">requested 0°</text>
+        <line class="actual-ray" id="actual-ray" x1="260" y1="215" x2="390" y2="215" marker-end="url(#actual-arrow)"></line>
+        <text id="actual-label" x="401" y="226">actual +90°</text>
+        <path class="joint-arc" id="joint-arc" marker-end="url(#joint-arrow)"></path>
+        <g id="vehicle-icon" transform="translate(260 215) rotate(90)"><path class="vehicle" d="M0 -58 L21 36 L0 22 L-21 36Z"></path></g>
+        <circle cx="260" cy="215" r="4" fill="var(--ink)"></circle>
+      </svg>
+      <div class="metrics">
+        <div class="metric"><span>Requested earth heading</span><output id="target-metric">0°</output></div>
+        <div class="metric"><span>Vehicle-relative joint</span><output id="joint-metric">0°</output></div>
+        <div class="metric"><span>Resulting earth heading</span><output id="actual-metric">+90°</output></div>
+      </div>
+    </div>
+    <div class="legend"><span>Vehicle nose</span><span class="target">Requested direction</span><span class="actual">Actual gimbal</span></div>
+    <p class="status bad" id="lab-status" role="status">Misaligned by 90°: vehicle heading leaked into the result.</p>
+  </section>
+
+  <h2>3. Derive the subtraction</h2>
+  <ol class="steps">
+    <li><strong>Gazebo adds the joint rotation to the vehicle rotation.</strong><div class="equation">actual earth yaw = vehicle earth yaw + vehicle-relative joint yaw</div></li>
+    <li><strong>We want the actual yaw to equal the earth target.</strong> Undo the vehicle rotation by moving it to the other side.<div class="equation">vehicle-relative joint yaw = earth target yaw − vehicle earth yaw</div></li>
+    <li><strong>For east vehicle and north target:</strong><div class="equation">joint = 0° − 90° = −90°<br>actual = 90° + (−90°) = 0°</div></li>
+  </ol>
+  <p>The broken bridge skips step 2. It sends the earth target directly to the body-relative joint. For the issue case that means joint <code>0°</code>, so the gimbal stays forward and ends up east.</p>
+
+  <h2>4. Connect it to your PX4 listeners</h2>
+  <table>
+    <thead><tr><th>Flags</th><th>Meaning of command yaw</th><th>Conversion</th></tr></thead>
+    <tbody>
+      <tr><td><code>32</code></td><td>Relative to vehicle nose</td><td>None</td></tr>
+      <tr><td><code>64</code></td><td>Relative to north</td><td>Subtract/invert vehicle attitude</td></tr>
+      <tr><td><code>92</code></td><td>Earth yaw plus roll, pitch, and yaw lock bits</td><td>Subtract/invert vehicle attitude</td></tr>
+    </tbody>
+  </table>
+  <p>Your earlier capture used vehicle yaw <code>−45.8°</code>, command yaw <code>0°</code>, and flag <code>32</code>. The expected earth result was therefore <code>−45.8° + 0°</code>. Your measured <code>−48.5°</code> was close—the gimbal was simply facing forward.</p>
+
+  <h2>5. Practice before revealing the next layer</h2>
+  <div class="practice">
+    <div class="practice-row">
+      <label for="practice-answer">Vehicle is −30°. Earth target is +40°. What vehicle-relative joint yaw is required?
+        <input id="practice-answer" type="number" min="-180" max="180" step="1" placeholder="degrees">
+      </label>
+      <button type="button" id="check-answer">Check prediction</button>
+    </div>
+    <p class="feedback" id="practice-feedback" role="status"></p>
+  </div>
+
+  <h2>6. Quaternion preview</h2>
+  <details>
+    <summary>Open only after the yaw subtraction feels natural</summary>
+    <p>Yaw subtraction works because all rotations in this simplified picture use one axis. A flying vehicle also rolls and pitches. Three-dimensional rotations do not generally commute, so PX4 stores the complete rotation as a quaternion.</p>
+    <div class="equation">q_joint = inverse(q_vehicle) × q_target</div>
+    <p>This is the same “undo the vehicle, then express the target” idea. Quaternion inverse replaces the minus sign, and quaternion multiplication replaces angle addition. The PR implements this as:</p>
+    <div class="equation">vehicle_attitude.inversed() * attitude_setpoint</div>
+    <p>Lesson 0003 explains why a yaw quaternion uses the half-angle and why multiplication order matters. You do not need that algebra to understand the bug signature.</p>
+  </details>
+
+  <h2>7. PX4 source exercise</h2>
+  <div class="practice">
+    <p><strong>Goal:</strong> prove the frame meaning from source, then predict the simulator result before using a listener.</p>
+    <ol>
+      <li>Open <a href="../../msg/versioned/VehicleAttitude.msg"><code>VehicleAttitude.msg</code></a>. Record the quaternion order and the exact source and destination frames of <code>q</code>.</li>
+      <li>Open <a href="../../msg/GimbalDeviceSetAttitude.msg"><code>GimbalDeviceSetAttitude.msg</code></a>. Locate the vehicle-frame and earth-frame yaw flags. Explain why flags <code>32</code> and <code>64</code> cannot be interpreted identically.</li>
+      <li>Open <a href="../../src/modules/simulation/gz_bridge/GZGimbal.cpp"><code>GZGimbal.cpp</code></a>. Find where the incoming quaternion is converted to Euler angles. Before running SITL, predict the actual earth yaw for vehicle yaw <code>+90°</code>, earth target <code>0°</code>, when no earth-to-vehicle conversion occurs.</li>
+      <li>Verify the prediction with <code>listener vehicle_attitude</code>, <code>listener gimbal_device_set_attitude</code>, and <code>listener gimbal_device_attitude_status</code>. Record the three yaws, the flags, and whether the vehicle yaw leaked into the gimbal result.</li>
+    </ol>
+    <p><strong>Evidence to keep:</strong> source location, prediction, listener values, and one-sentence conclusion.</p>
+  </div>
+
+  <h2>Keep nearby</h2>
+  <p>Use the <a href="../reference/lesson-0001-px4-listener-cheat-sheet.html">PX4 listener command cheat sheet</a> in the console and the <a href="../reference/gimbal-frame-math-cheat-sheet.html">gimbal frame math cheat sheet</a> while interpreting the output.</p>
+  <p>Continue with <a href="0002-px4-odometry-contract.html">Lesson 0002</a> for the SLAM/PX4 odometry track, then <a href="0003-quaternions-as-rotations.html">Lesson 0003</a> for quaternion rotation.</p>
+  <p class="sources">Primary sources: <a href="https://docs.px4.io/main/en/tutorials/motion-capture#coordinate-frames">PX4 coordinate frames</a>, <a href="https://mavlink.io/en/messages/common.html#GIMBAL_DEVICE_SET_ATTITUDE">MAVLink gimbal attitude semantics</a>, and <a href="../../msg/versioned/VehicleAttitude.msg">PX4 VehicleAttitude.msg</a>. Ask your agent about any step that does not match what you see in SITL.</p>
+</article>
+
+<script>
+(() => {
+  const root = document.getElementById('yaw-lab');
+  const vehicle = root.querySelector('#vehicle-heading');
+  const command = root.querySelector('#command-yaw');
+  const frame = root.querySelector('#command-frame');
+  const convert = root.querySelector('#apply-conversion');
+  const vehicleValue = root.querySelector('#vehicle-heading-value');
+  const commandValue = root.querySelector('#command-yaw-value');
+  const targetRay = root.querySelector('#target-ray');
+  const targetDot = root.querySelector('#target-dot');
+  const targetLabel = root.querySelector('#target-label');
+  const actualRay = root.querySelector('#actual-ray');
+  const actualLabel = root.querySelector('#actual-label');
+  const jointArc = root.querySelector('#joint-arc');
+  const vehicleIcon = root.querySelector('#vehicle-icon');
+  const targetMetric = root.querySelector('#target-metric');
+  const jointMetric = root.querySelector('#joint-metric');
+  const actualMetric = root.querySelector('#actual-metric');
+  const status = root.querySelector('#lab-status');
+  const cx = 260, cy = 215;
+
+  const wrap = value => {
+    const result = ((value + 180) % 360 + 360) % 360 - 180;
+    return Object.is(result, -0) ? 0 : result;
+  };
+  const fmt = value => `${value > 0 ? '+' : ''}${Math.round(value)}°`;
+  const point = (angle, radius) => {
+    const radians = (angle - 90) * Math.PI / 180;
+    return { x:cx + radius * Math.cos(radians), y:cy + radius * Math.sin(radians) };
+  };
+  const setLine = (line, angle, radius) => {
+    const end = point(angle, radius);
+    line.setAttribute('x2', end.x.toFixed(2));
+    line.setAttribute('y2', end.y.toFixed(2));
+    return end;
+  };
+  const placeLabel = (label, end, angle) => {
+    const right = Math.cos((angle - 90) * Math.PI / 180) >= 0;
+    label.setAttribute('x', (end.x + (right ? 13 : -13)).toFixed(2));
+    label.setAttribute('y', (end.y + 10).toFixed(2));
+    label.setAttribute('text-anchor', right ? 'start' : 'end');
+  };
+  const arcPath = (start, delta, radius) => {
+    if (Math.abs(delta) < 1) return '';
+    const a = point(start, radius), b = point(start + delta, radius);
+    return `M${a.x.toFixed(2)} ${a.y.toFixed(2)} A${radius} ${radius} 0 0 ${delta >= 0 ? 1 : 0} ${b.x.toFixed(2)} ${b.y.toFixed(2)}`;
+  };
+
+  function update() {
+    const vehicleYaw = Number(vehicle.value);
+    const commandYaw = Number(command.value);
+    const earthFrame = frame.value === 'earth';
+    convert.disabled = !earthFrame;
+    const targetEarth = earthFrame ? commandYaw : wrap(vehicleYaw + commandYaw);
+    const joint = earthFrame && convert.checked ? wrap(commandYaw - vehicleYaw) : commandYaw;
+    const actualEarth = wrap(vehicleYaw + joint);
+    const error = wrap(actualEarth - targetEarth);
+
+    vehicleValue.value = fmt(vehicleYaw);
+    commandValue.value = fmt(commandYaw);
+    vehicleIcon.setAttribute('transform', `translate(${cx} ${cy}) rotate(${vehicleYaw})`);
+    const targetEnd = setLine(targetRay, targetEarth, 160);
+    targetDot.setAttribute('cx', targetEnd.x.toFixed(2)); targetDot.setAttribute('cy', targetEnd.y.toFixed(2));
+    targetLabel.textContent = `requested ${fmt(targetEarth)}`; placeLabel(targetLabel, targetEnd, targetEarth);
+    const actualEnd = setLine(actualRay, actualEarth, 130);
+    actualLabel.textContent = `actual ${fmt(actualEarth)}`; placeLabel(actualLabel, actualEnd, actualEarth);
+    jointArc.setAttribute('d', arcPath(vehicleYaw, joint, 65));
+    targetMetric.value = fmt(targetEarth); jointMetric.value = fmt(joint); actualMetric.value = fmt(actualEarth);
+
+    if (Math.abs(error) <= 1) {
+      status.className = 'status good';
+      status.textContent = earthFrame && convert.checked ? 'Aligned: the earth target was converted into a vehicle-relative joint angle.' : 'Aligned: the command already matches its reference frame.';
+    } else {
+      status.className = 'status bad';
+      status.textContent = `Misaligned by ${fmt(Math.abs(error))}: vehicle heading leaked into the result.`;
+    }
+  }
+
+  [vehicle, command, frame, convert].forEach(element => element.addEventListener('input', update));
+  root.querySelector('#issue-preset').addEventListener('click', () => {
+    vehicle.value = '90'; command.value = '0'; frame.value = 'earth'; convert.checked = false; update();
+  });
+  root.querySelector('#capture-preset').addEventListener('click', () => {
+    vehicle.value = '-46'; command.value = '0'; frame.value = 'vehicle'; convert.checked = false; update();
+  });
+
+  const answer = document.getElementById('practice-answer');
+  const feedback = document.getElementById('practice-feedback');
+  document.getElementById('check-answer').addEventListener('click', () => {
+    if (answer.value === '') { feedback.textContent = 'Enter a prediction first.'; return; }
+    if (Math.abs(wrap(Number(answer.value) - 70)) <= 1) {
+      feedback.textContent = 'Correct: +70°. The check is −30° + 70° = +40°.';
+    } else {
+      feedback.textContent = 'Try again: find the turn from −30° vehicle heading to +40° earth heading.';
+    }
+  });
+  update();
+})();
+</script>
+</body>
+</html>
