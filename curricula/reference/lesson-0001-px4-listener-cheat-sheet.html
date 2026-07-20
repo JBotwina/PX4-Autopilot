@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 0001 — PX4 Listener Command Cheat Sheet</title>
+  <style>
+    :root {
+      color-scheme:light dark;
+      --paper:#f6f3eb; --panel:#fffdf7; --ink:#172426; --muted:#617073;
+      --line:#cbd3d0; --soft:#eaf0ed; --accent:#176f78; --accent-soft:#d9ebe8;
+      --command:#102b2e; --command-ink:#e9fbf8; --warn:#8a5a20;
+    }
+    @media (prefers-color-scheme:dark) {
+      :root {
+        --paper:#101716; --panel:#18211f; --ink:#edf4f1; --muted:#a9b7b3;
+        --line:#40504c; --soft:#222e2b; --accent:#71ced5; --accent-soft:#173436;
+        --command:#091f21; --command-ink:#e9fbf8; --warn:#e5b06e;
+      }
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:15.5px/1.55 ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    main { max-width:980px; margin:auto; padding:42px 26px 64px; }
+    h1,h2,h3 { font-family:ui-serif,Georgia,serif; line-height:1.15; }
+    h1 { max-width:760px; margin:7px 0 8px; font-size:clamp(34px,6vw,50px); font-weight:600; }
+    h2 { margin:34px 0 13px; font-size:24px; }
+    h3 { margin:0 0 5px; font-size:19px; }
+    p { max-width:76ch; }
+    a { color:var(--accent); }
+    code { padding:.08em .3em; border-radius:4px; background:var(--soft); }
+    .kicker { color:var(--muted); font-size:12px; font-weight:750; letter-spacing:.09em; text-transform:uppercase; }
+    .subtitle { max-width:760px; margin:0 0 25px; color:var(--muted); font-size:17px; }
+    .workflow { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:13px; margin:22px 0; }
+    .card { padding:17px; border:1px solid var(--line); border-radius:12px; background:var(--panel); break-inside:avoid; }
+    .step { display:inline-grid; place-items:center; width:28px; height:28px; margin-bottom:11px; border-radius:50%; color:var(--panel); background:var(--accent); font-weight:800; }
+    .card p { margin:4px 0 0; color:var(--muted); }
+    pre { margin:11px 0 0; padding:13px 14px; overflow:auto; border-radius:8px; color:var(--command-ink); background:var(--command); font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; }
+    table { width:100%; border-collapse:collapse; background:var(--panel); }
+    th,td { padding:10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:var(--muted); font-size:13px; }
+    td:first-child { white-space:nowrap; }
+    .callout { margin:18px 0; padding:14px 17px; border-left:4px solid var(--accent); background:var(--accent-soft); }
+    .warning { border-left-color:var(--warn); }
+    .equation { padding:13px 16px; overflow:auto; border-radius:8px; background:var(--soft); font:15px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .checklist { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:13px; }
+    .muted { color:var(--muted); }
+    @media (max-width:760px) { .workflow,.checklist { grid-template-columns:1fr; } main { padding:30px 17px 50px; } td:first-child { white-space:normal; } }
+    @media print {
+      :root { --paper:#fff; --panel:#fff; --ink:#000; --muted:#444; --line:#aaa; --soft:#f2f2f2; --accent:#222; --accent-soft:#f2f2f2; --command:#eee; --command-ink:#000; --warn:#555; }
+      main { max-width:none; padding:0; }
+      a { color:inherit; text-decoration:none; }
+      .workflow { grid-template-columns:repeat(3,1fr); }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <nav class="kicker"><a href="../lessons/0001-frames-before-quaternions.html">Lesson 0001</a> · PX4 console reference</nav>
+  <h1>PX4 listener commands</h1>
+  <p class="subtitle">A copy-ready reference for tracing the vehicle attitude, commanded gimbal attitude, and resulting gimbal attitude in Lesson 0001.</p>
+
+  <h2>The three-command trace</h2>
+  <div class="workflow">
+    <section class="card">
+      <span class="step">1</span>
+      <h3>Vehicle orientation</h3>
+      <p>Where is the drone facing in the NED Earth frame?</p>
+      <pre>listener vehicle_attitude -n 1</pre>
+    </section>
+    <section class="card">
+      <span class="step">2</span>
+      <h3>Gimbal command</h3>
+      <p>What quaternion and frame flags were sent to the gimbal?</p>
+      <pre>listener gimbal_device_set_attitude -n 1</pre>
+    </section>
+    <section class="card">
+      <span class="step">3</span>
+      <h3>Gimbal result</h3>
+      <p>Where does the gimbal report that it is actually pointing?</p>
+      <pre>listener gimbal_device_attitude_status -n 1</pre>
+    </section>
+  </div>
+
+  <div class="callout">
+    Run the commands in this order and record the Euler yaw printed beside each quaternion. Also record the command <code>flags</code>; they determine the frame in which its yaw must be interpreted.
+  </div>
+
+  <h2>General listener syntax</h2>
+  <div class="equation">listener &lt;topic_name&gt; [-i instance] [-n messages] [-r rate_hz]</div>
+  <table>
+    <thead><tr><th>Command</th><th>What it does</th><th>When to use it</th></tr></thead>
+    <tbody>
+      <tr><td><code>listener vehicle_attitude</code></td><td>Prints one message. One message is the default.</td><td>Quick inspection.</td></tr>
+      <tr><td><code>listener vehicle_attitude -n 1</code></td><td>Explicitly prints one message.</td><td>Capturing a reproducible snapshot.</td></tr>
+      <tr><td><code>listener vehicle_attitude -n 5</code></td><td>Prints five topic updates.</td><td>Checking whether a value is changing.</td></tr>
+      <tr><td><code>listener vehicle_attitude -n 10 -r 2</code></td><td>Prints ten messages at no more than 2 Hz.</td><td>Watching motion without flooding the console.</td></tr>
+      <tr><td><code>listener &lt;topic&gt; -i 1 -n 1</code></td><td>Reads instance 1 of a multi-instance topic.</td><td>Distinguishing multiple sensors or publishers.</td></tr>
+      <tr><td><code>listener</code></td><td>Prints the command usage because no topic was supplied.</td><td>Remembering the available options.</td></tr>
+    </tbody>
+  </table>
+  <p class="muted">While printing messages, exit with <kbd>Ctrl</kbd>+<kbd>C</kbd>, <kbd>Esc</kbd>, or <kbd>Q</kbd>.</p>
+
+  <h2>More copy-ready examples</h2>
+  <pre>listener vehicle_odometry -n 1
+listener vehicle_visual_odometry -n 1
+listener vehicle_mocap_odometry -n 1
+listener estimator_odometry -n 1
+listener vehicle_local_position -n 1
+listener vehicle_global_position -n 1
+listener vehicle_attitude_setpoint -n 1
+listener vehicle_local_position_setpoint -n 1
+listener vehicle_roi -n 1
+listener gimbal_manager_set_attitude -n 1
+listener gimbal_manager_status -n 1
+listener estimator_status -n 1
+listener estimator_status_flags -n 1
+listener vehicle_status -n 1
+listener vehicle_command -n 1
+listener vehicle_command_ack -n 1
+listener mission_result -n 1</pre>
+
+  <h2>What to read in each message</h2>
+  <div class="checklist">
+    <section class="card">
+      <h3><code>vehicle_attitude</code></h3>
+      <p><code>q</code> rotates from vehicle FRD to Earth NED. Use the displayed yaw as the vehicle’s Earth heading. Check <code>timestamp</code> to make sure the sample is current.</p>
+    </section>
+    <section class="card">
+      <h3><code>gimbal_device_set_attitude</code></h3>
+      <p><code>q</code> is the requested orientation. Read <code>flags</code> before interpreting it: flag 32 means vehicle-relative yaw; flag 64 means Earth-relative yaw.</p>
+    </section>
+    <section class="card">
+      <h3><code>gimbal_device_attitude_status</code></h3>
+      <p><code>q</code> reports the resulting orientation. Compare its displayed yaw with your prediction. Check <code>failure_flags</code> before blaming frame math.</p>
+    </section>
+    <section class="card">
+      <h3>Useful flag values</h3>
+      <p><code>4</code> roll lock · <code>8</code> pitch lock · <code>16</code> yaw lock · <code>32</code> vehicle-frame yaw · <code>64</code> Earth-frame yaw.</p>
+    </section>
+  </div>
+
+  <h2>Lesson 0001 prediction checks</h2>
+  <table>
+    <thead><tr><th>Command frame</th><th>Correct Earth result</th><th>What a frame bug looks like</th></tr></thead>
+    <tbody>
+      <tr><td>Vehicle, flag <code>32</code></td><td><code>result ≈ vehicle yaw + command yaw</code></td><td>The gimbal correctly moves with the vehicle reference.</td></tr>
+      <tr><td>Earth, flag <code>64</code></td><td><code>result ≈ command yaw</code></td><td><code>result ≈ vehicle yaw + command yaw</code>: vehicle yaw leaked into the result.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout warning">
+    Quaternion values and Euler yaw are orientations, not angular velocities. A small difference between commanded and reported yaw can come from simulation timing, controller response, or gimbal limits; look for the full vehicle-yaw-sized error that identifies the frame bug.
+  </div>
+
+  <p class="muted">Primary local sources: <a href="../../src/systemcmds/topic_listener/listener_main.cpp">PX4 listener implementation</a> · <a href="../../msg/versioned/VehicleAttitude.msg">VehicleAttitude definition</a> · <a href="../../msg/GimbalDeviceSetAttitude.msg">GimbalDeviceSetAttitude definition</a> · <a href="../../msg/GimbalDeviceAttitudeStatus.msg">GimbalDeviceAttitudeStatus definition</a></p>
+</main>
+</body>
+</html>

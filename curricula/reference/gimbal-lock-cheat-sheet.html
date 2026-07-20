@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gimbal Lock and Quaternions — Quick Reference</title>
+  <style>
+    :root { color-scheme:light dark; --paper:#fbfaf6; --ink:#182126; --muted:#58666d; --line:#c8d0d2; --soft:#eef3f2; --accent:#7b4e93; --warn:#a85b20; }
+    @media (prefers-color-scheme:dark) { :root { --paper:#111719; --ink:#edf3f3; --muted:#a9b6b8; --line:#435054; --soft:#1b2427; --accent:#d1a2e7; --warn:#f1a867; } }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.52 ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    main { max-width:940px; margin:auto; padding:36px 26px 58px; }
+    h1,h2 { font-family:ui-serif,Georgia,serif; line-height:1.15; }
+    h1 { margin:0 0 6px; font-size:34px; } h2 { margin:25px 0 8px; font-size:21px; }
+    .subtitle,.muted { color:var(--muted); } .subtitle { margin:0 0 22px; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px 28px; }
+    .block { break-inside:avoid; }
+    .equation { padding:11px 14px; border-left:4px solid var(--accent); background:var(--soft); font:15px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace; overflow:auto; }
+    .warning { border-left-color:var(--warn); }
+    table { width:100%; border-collapse:collapse; } th,td { padding:8px 9px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:var(--muted); } code { padding:.08em .3em; border-radius:3px; background:var(--soft); }
+    a { color:var(--accent); }
+    @media (max-width:650px) { .grid { grid-template-columns:1fr; } main { padding:28px 18px 44px; } }
+    @media print { :root { --paper:white; --ink:black; --muted:#444; --line:#aaa; --soft:#f3f3f3; --accent:#222; --warn:#555; } main { max-width:none; padding:0; } a { color:inherit; text-decoration:none; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Gimbal lock and quaternions</h1>
+  <p class="subtitle">What becomes singular, what stays valid, and what PX4 still has to handle</p>
+
+  <div class="grid">
+    <section class="block">
+      <h2>What locks?</h2>
+      <p>In a 3-2-1 yaw–pitch–roll sequence, pitch at ±90° makes the first yaw axis and third roll axis collinear. Three angle controls then describe only two independent instantaneous rotation directions.</p>
+    </section>
+    <section class="block">
+      <h2>The observable symptom</h2>
+      <div class="equation">pitch → ±90°<br>yaw and roll → coupled / non-unique</div>
+      <p>The orientation remains real and valid; its Euler coordinates become ambiguous. Angle rates may become very large near the singularity.</p>
+    </section>
+    <section class="block">
+      <h2>Why quaternions avoid it</h2>
+      <div class="equation">q = [w,x,y,z]<br>w²+x²+y²+z² = 1</div>
+      <p>A quaternion stores one axis-and-angle rotation, not three sequential rotations. There is no middle Euler angle whose axes can collapse.</p>
+    </section>
+    <section class="block">
+      <h2>The tradeoff</h2>
+      <p>Quaternions use four constrained numbers for three rotational degrees of freedom. They also double-cover orientation: <code>q</code> and <code>−q</code> are the same physical attitude.</p>
+    </section>
+  </div>
+
+  <h2>What quaternions do not fix</h2>
+  <table>
+    <thead><tr><th>Problem</th><th>Quaternion helps?</th><th>Reason</th></tr></thead>
+    <tbody>
+      <tr><td>Euler-coordinate singularity</td><td>Yes</td><td>Attitude state no longer depends on a three-angle chart.</td></tr>
+      <tr><td>Mechanical axes becoming collinear</td><td>No</td><td>Software representation cannot create a missing actuator direction.</td></tr>
+      <tr><td>Joint travel limits or cable wrap</td><td>No</td><td>These are physical constraints.</td></tr>
+      <tr><td>Euler display jumping near ±90° pitch</td><td>Not necessarily</td><td>Converting a valid quaternion back to Euler angles reintroduces the singular chart.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>PX4 reading rule</h2>
+  <div class="equation warning">quaternion state: globally nonsingular orientation<br>Euler readout: convenient local coordinates<br>gimbal joints: real mechanical constraints</div>
+  <p>Do not diagnose a quaternion failure from an Euler-angle jump alone. Compare the quaternion or rotate a reference vector before concluding that the physical attitude jumped.</p>
+
+  <p class="muted">Primary sources: <a href="https://ntrs.nasa.gov/citations/20180003657">NASA Navigation Filter Best Practices</a> · <a href="https://ntrs.nasa.gov/citations/19990110711">NASA Spacecraft Attitude Representations</a> · <a href="../../src/lib/matrix/matrix/Quaternion.hpp">PX4 Quaternion.hpp</a></p>
+</main>
+</body>
+</html>

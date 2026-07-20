@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PX4 Quaternion Rotation — Quick Reference</title>
+  <style>
+    :root { color-scheme:light dark; --paper:#fbfaf6; --ink:#182126; --muted:#58666d; --line:#c8d0d2; --soft:#eef3f2; --accent:#176b72; }
+    @media (prefers-color-scheme:dark) { :root { --paper:#111719; --ink:#edf3f3; --muted:#a9b6b8; --line:#435054; --soft:#1b2427; --accent:#76cbd0; } }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    main { max-width:920px; margin:auto; padding:36px 26px 58px; }
+    h1,h2 { font-family:ui-serif,Georgia,serif; line-height:1.15; }
+    h1 { margin:0 0 6px; font-size:34px; } h2 { margin:27px 0 9px; font-size:21px; }
+    .subtitle { margin:0 0 22px; color:var(--muted); }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px 28px; }
+    .block { break-inside:avoid; }
+    .equation { padding:11px 14px; border-left:4px solid var(--accent); background:var(--soft); font:15px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace; overflow:auto; }
+    table { width:100%; border-collapse:collapse; } th,td { padding:8px 9px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:var(--muted); } code { padding:.08em .3em; border-radius:3px; background:var(--soft); }
+    a { color:var(--accent); } .muted { color:var(--muted); }
+    @media (max-width:650px) { .grid { grid-template-columns:1fr; } main { padding:28px 18px 44px; } }
+    @media print { :root { --paper:white; --ink:black; --muted:#444; --line:#aaa; --soft:#f3f3f3; --accent:#222; } main { max-width:none; padding:0; } a { color:inherit; text-decoration:none; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>PX4 quaternion rotations</h1>
+  <p class="subtitle">Hamilton convention · scalar first · <code>[w, x, y, z]</code></p>
+
+  <div class="grid">
+    <section class="block">
+      <h2>Axis-angle encoding</h2>
+      <div class="equation">q = [cos(θ/2), axis · sin(θ/2)]</div>
+      <p>The vector part points along the rotation axis. The quaternion must have unit length to represent a pure rotation.</p>
+    </section>
+
+    <section class="block">
+      <h2>Pure yaw</h2>
+      <div class="equation">q_yaw(ψ) = [cos(ψ/2), 0, 0, sin(ψ/2)]</div>
+      <p>Yaw rotates around the down/Z axis, so only <code>w</code> and <code>z</code> are nonzero.</p>
+    </section>
+
+    <section class="block">
+      <h2>Inverse</h2>
+      <div class="equation">q⁻¹ = conjugate(q) = [w, −x, −y, −z]</div>
+      <p>This equality assumes a unit quaternion. The inverse undoes the rotation.</p>
+    </section>
+
+    <section class="block">
+      <h2>Composition</h2>
+      <div class="equation">q_result = q₂ ⊗ q₁<br>first apply q₁, then apply q₂</div>
+      <p>Quaternion multiplication is not generally commutative: <code>q₂q₁ ≠ q₁q₂</code>.</p>
+    </section>
+
+    <section class="block">
+      <h2>Rotate a vector</h2>
+      <div class="equation">v_rotated = q ⊗ [0,v] ⊗ q⁻¹</div>
+      <p>Represent the vector as a pure quaternion with scalar part zero.</p>
+    </section>
+
+    <section class="block">
+      <h2>PX4 frame conversion</h2>
+      <div class="equation">q_joint = q_vehicle⁻¹ ⊗ q_target<br>q_vehicle ⊗ q_joint = q_target</div>
+      <p>The inverse removes the vehicle-to-earth rotation, leaving the target expressed relative to the vehicle.</p>
+    </section>
+  </div>
+
+  <h2>Useful yaw values</h2>
+  <table>
+    <thead><tr><th>Yaw</th><th>Quaternion [w, x, y, z]</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>0°</td><td><code>[1, 0, 0, 0]</code></td><td>No rotation</td></tr>
+      <tr><td>+90°</td><td><code>[0.7071, 0, 0, 0.7071]</code></td><td>East from north</td></tr>
+      <tr><td>−90°</td><td><code>[0.7071, 0, 0, −0.7071]</code></td><td>West from north</td></tr>
+      <tr><td>180°</td><td><code>[0, 0, 0, 1]</code></td><td>South from north</td></tr>
+      <tr><td>360°</td><td><code>[−1, 0, 0, 0]</code></td><td>Same orientation as 0°</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Two facts that prevent common mistakes</h2>
+  <ul>
+    <li><code>q</code> and <code>−q</code> represent the same physical orientation.</li>
+    <li>A quaternion value is incomplete without its source and destination frames.</li>
+  </ul>
+
+  <p class="muted">Primary sources: <a href="../../src/lib/matrix/matrix/Quaternion.hpp">PX4 Quaternion.hpp</a> · <a href="../../msg/versioned/VehicleAttitude.msg">PX4 VehicleAttitude.msg</a> · <a href="https://mavlink.io/en/messages/common.html#ATTITUDE_QUATERNION">MAVLink attitude quaternion</a></p>
+</main>
+</body>
+</html>

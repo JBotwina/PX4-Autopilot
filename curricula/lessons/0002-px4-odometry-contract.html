@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The PX4 Odometry Contract</title>
+  <style>
+    :root {
+      color-scheme:light dark;
+      --paper:#f5f3ed; --ink:#1f2728; --muted:#647071; --line:#ccd1cc;
+      --panel:#fffdf8; --soft:#e9efeb; --world:#176b73; --body:#a45432;
+      --time:#7656a5; --good:#257242; --bad:#a23d32; --code:#172326;
+      --code-ink:#eef7f3; --shadow:0 15px 42px rgba(32,44,43,.09);
+    }
+    @media (prefers-color-scheme:dark) {
+      :root {
+        --paper:#111716; --ink:#eef3ef; --muted:#aab5b2; --line:#43504d;
+        --panel:#19211f; --soft:#222e2b; --world:#65c5ce; --body:#ec9b78;
+        --time:#bca0eb; --good:#76d895; --bad:#ff9a8f; --code:#090f0e;
+        --code-ink:#eef7f3; --shadow:none;
+      }
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--paper); font:16px/1.62 ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    article { max-width:960px; margin:auto; padding:50px 26px 86px; }
+    h1,h2,h3 { font-family:ui-serif,Georgia,serif; line-height:1.16; }
+    h1 { max-width:760px; margin:7px 0 13px; font-size:clamp(36px,6vw,56px); font-weight:600; }
+    h2 { margin:46px 0 13px; font-size:29px; }
+    h3 { margin:0 0 8px; font-size:20px; }
+    p { max-width:74ch; }
+    a { color:var(--world); }
+    code { padding:.08em .3em; border-radius:4px; background:var(--soft); }
+    pre { margin:0; padding:18px; overflow:auto; color:var(--code-ink); background:var(--code); border-radius:11px; font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    pre code { padding:0; color:inherit; background:transparent; }
+    .kicker { color:var(--muted); font-size:12px; font-weight:750; letter-spacing:.09em; text-transform:uppercase; }
+    .win { max-width:800px; padding:16px 18px; border-left:4px solid var(--world); background:var(--soft); }
+    .pipeline { display:grid; grid-template-columns:1fr auto 1.15fr auto 1fr; gap:10px; align-items:stretch; margin:25px 0; }
+    .node { display:grid; align-content:center; min-height:112px; padding:15px; text-align:center; border:1px solid var(--line); border-radius:12px; background:var(--panel); box-shadow:var(--shadow); }
+    .node strong { display:block; font-family:ui-serif,Georgia,serif; font-size:19px; }
+    .node span { color:var(--muted); font-size:13px; }
+    .arrow { display:grid; place-items:center; color:var(--world); font-size:28px; }
+    .contract { border-color:var(--world); }
+    .ideas { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin:22px 0; }
+    .idea { padding:17px; border:1px solid var(--line); border-radius:11px; background:var(--panel); }
+    .idea p { margin:0; color:var(--muted); }
+    .idea .mark { display:grid; place-items:center; width:32px; height:32px; margin-bottom:10px; border-radius:50%; color:var(--panel); background:var(--world); font-weight:800; }
+    .lab { margin:26px 0; padding:21px; border:1px solid var(--line); border-radius:15px; background:var(--panel); box-shadow:var(--shadow); }
+    .lab-grid { display:grid; grid-template-columns:minmax(280px,.8fr) minmax(320px,1.2fr); gap:20px; }
+    .controls { display:grid; gap:13px; align-content:start; }
+    label { display:grid; gap:5px; font-weight:650; }
+    select,input[type="range"] { width:100%; }
+    select { padding:9px 10px; color:var(--ink); background:var(--paper); border:1px solid var(--line); border-radius:7px; font:inherit; }
+    input[type="range"] { accent-color:var(--world); }
+    select:focus-visible,input:focus-visible,button:focus-visible { outline:3px solid color-mix(in srgb,var(--world) 42%,transparent); outline-offset:2px; }
+    .readout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; margin-top:11px; }
+    .readout div { padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--paper); }
+    .readout span { display:block; color:var(--muted); font-size:12px; }
+    .readout output { font:700 18px ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .note { margin:13px 0 0; padding:11px 13px; border-left:3px solid var(--time); background:var(--soft); }
+    .known { color:var(--good); } .unknown { color:var(--bad); }
+    table { width:100%; margin:16px 0; border-collapse:collapse; }
+    th,td { padding:10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:var(--muted); }
+    .quiz { display:grid; gap:13px; margin:20px 0; }
+    .question { padding:16px; border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+    .question p { margin:0 0 10px; font-weight:650; }
+    .answers { display:flex; flex-wrap:wrap; gap:9px; }
+    button { padding:9px 13px; color:var(--ink); background:var(--soft); border:1px solid var(--line); border-radius:7px; font:650 14px/1.2 inherit; cursor:pointer; }
+    button:hover { border-color:var(--world); }
+    button.correct { color:var(--panel); background:var(--good); border-color:var(--good); }
+    button.wrong { color:var(--panel); background:var(--bad); border-color:var(--bad); }
+    .feedback { min-height:1.5em; margin:9px 0 0; color:var(--muted); }
+    .source-exercise { padding:19px; border:1px solid var(--world); border-radius:12px; background:var(--panel); }
+    li { margin:.5em 0; }
+    .sources { color:var(--muted); font-size:14px; }
+    @media (max-width:760px) {
+      .pipeline { grid-template-columns:1fr; }
+      .arrow { transform:rotate(90deg); min-height:22px; }
+      .ideas,.lab-grid { grid-template-columns:1fr; }
+    }
+    @media (max-width:540px) {
+      article { padding:34px 17px 64px; }
+      .ideas,.readout { grid-template-columns:1fr; }
+      .lab { padding:14px; }
+      th,td { padding:7px 5px; }
+    }
+    @media print {
+      :root { --paper:#fff; --panel:#fff; --ink:#000; --muted:#444; --line:#aaa; --soft:#f2f2f2; --shadow:none; }
+      article { max-width:none; padding:0; }
+      .quiz { display:none; }
+    }
+  </style>
+</head>
+<body>
+<article>
+  <nav class="kicker" aria-label="Lesson navigation"><a href="0001-frames-before-quaternions.html">← Previous: 0001</a> · <a href="index.html">All lessons</a> · <a href="0003-quaternions-as-rotations.html">Next: 0003 →</a></nav>
+  <div class="kicker">Lesson 0002 · PX4 odometry</div>
+  <h1>The odometry contract: say exactly what you know</h1>
+  <p class="win"><strong>Tangible win:</strong> after this lesson you can inspect a PX4 <code>VehicleOdometry</code> sample and distinguish its measurement, frame, capture time, uncertainty, and continuity—without confusing “zero” with “unknown.”</p>
+
+  <h2>1. PX4 does not need to run your SLAM algorithm</h2>
+  <p>A companion computer may use cameras and an IMU to estimate motion. PX4 does not need all of that internal SLAM machinery. It needs a precise message describing the result.</p>
+  <div class="pipeline" aria-label="Odometry producer to PX4 pipeline">
+    <div class="node"><strong>VIO or SLAM</strong><span>estimates motion on the companion computer</span></div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="node contract"><strong>VehicleOdometry</strong><span>the typed boundary contract</span></div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="node"><strong>PX4 EKF2</strong><span>validates and fuses selected measurements</span></div>
+  </div>
+  <p>The contract is useful beyond SLAM. A swarm logger must preserve enough of it to answer: where did each vehicle think it was, how certain was it, and did its estimate jump?</p>
+
+  <h2>2. Five kinds of truth travel together</h2>
+  <div class="ideas">
+    <div class="idea"><div class="mark">1</div><h3>Measurement</h3><p>Position, orientation, velocity, and angular velocity.</p></div>
+    <div class="idea"><div class="mark">2</div><h3>Frame</h3><p>The coordinate system that gives the numbers physical meaning.</p></div>
+    <div class="idea"><div class="mark">3</div><h3>Time</h3><p>When the sensor information was captured, not merely when PX4 received it.</p></div>
+    <div class="idea"><div class="mark">4</div><h3>Uncertainty</h3><p>Variance describes how uncertain the producer believes each measurement is.</p></div>
+    <div class="idea"><div class="mark">5</div><h3>Continuity</h3><p>A reset counter announces that the estimate jumped to a new solution.</p></div>
+    <div class="idea"><div class="mark">∅</div><h3>Availability</h3><p><code>NaN</code> means unavailable. A numerical zero is a real measurement.</p></div>
+  </div>
+
+  <h2>3. Build an odometry sample</h2>
+  <p>Change one property at a time. Watch how the same physical story becomes a precise PX4 message.</p>
+
+  <section class="lab" aria-label="Interactive VehicleOdometry packet builder">
+    <div class="lab-grid">
+      <div class="controls">
+        <label for="pose-frame">Pose reference frame
+          <select id="pose-frame">
+            <option value="NED">NED · aligned with true north</option>
+            <option value="FRD">FRD · fixed local heading offset</option>
+          </select>
+        </label>
+        <label for="velocity-frame">Velocity reference frame
+          <select id="velocity-frame">
+            <option value="NED">NED · local navigation frame</option>
+            <option value="FRD">FRD · fixed local heading offset</option>
+            <option value="BODY_FRD">BODY_FRD · rotates with the vehicle</option>
+          </select>
+        </label>
+        <label for="position-state">Position knowledge
+          <select id="position-state">
+            <option value="known">Known at [2, −1, −0.5] m</option>
+            <option value="unknown">Unavailable</option>
+          </select>
+        </label>
+        <label for="velocity-state">Velocity knowledge
+          <select id="velocity-state">
+            <option value="moving">Known moving [1, 0, 0] m/s</option>
+            <option value="stationary">Known stationary [0, 0, 0] m/s</option>
+            <option value="unknown">Unavailable</option>
+          </select>
+        </label>
+        <label for="continuity-state">Estimator continuity
+          <select id="continuity-state">
+            <option value="continuous">Continuous solution</option>
+            <option value="reset">Relocalized: estimate jumped</option>
+          </select>
+        </label>
+        <label for="uncertainty">Position standard deviation <output id="sigma-output">0.20 m</output>
+          <input id="uncertainty" type="range" min="0.05" max="2" value="0.20" step="0.05">
+        </label>
+        <div class="readout">
+          <div><span>Stored variance σ²</span><output id="variance-output">0.040 m²</output></div>
+          <div><span>Reset counter</span><output id="reset-output">7</output></div>
+        </div>
+      </div>
+      <div>
+        <pre aria-live="polite"><code id="packet-output"></code></pre>
+        <p class="note" id="packet-note"></p>
+      </div>
+    </div>
+  </section>
+
+  <h2>4. The traps that cause believable failures</h2>
+  <table>
+    <thead><tr><th>Field</th><th>Tempting mistake</th><th>Contract meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>pose_frame</code></td><td>Assume every FRD frame rotates with the body.</td><td>Pose FRD is a fixed local frame with an arbitrary heading offset.</td></tr>
+      <tr><td><code>velocity_frame</code></td><td>Rotate body velocity as though it were already local.</td><td><code>BODY_FRD</code> rotates with the vehicle; local NED/FRD does not.</td></tr>
+      <tr><td><code>velocity</code></td><td>Use zeros when velocity is unavailable.</td><td><code>[0,0,0]</code> asserts that the vehicle was measured stationary; use NaNs for unknown.</td></tr>
+      <tr><td><code>timestamp_sample</code></td><td>Insert packet-arrival time.</td><td>It identifies when the underlying measurement was sampled.</td></tr>
+      <tr><td><code>*_variance</code></td><td>Use tiny values to look accurate.</td><td>Smaller variance tells the estimator to trust the measurement more.</td></tr>
+      <tr><td><code>reset_counter</code></td><td>Jump the pose but keep the old count.</td><td>Increment it when attitude, position, or velocity resets.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>5. Check the contract</h2>
+  <div class="quiz">
+    <div class="question" data-answer="nan">
+      <p>The producer cannot estimate velocity. What should it publish?</p>
+      <div class="answers"><button type="button" data-choice="zero">Use zero</button><button type="button" data-choice="nan">Use NaNs</button></div>
+      <div class="feedback" role="status"></div>
+    </div>
+    <div class="question" data-answer="capture">
+      <p>Which time belongs in <code>timestamp_sample</code>?</p>
+      <div class="answers"><button type="button" data-choice="capture">Capture time</button><button type="button" data-choice="arrival">Arrival time</button></div>
+      <div class="feedback" role="status"></div>
+    </div>
+    <div class="question" data-answer="increment">
+      <p>SLAM relocalizes and moves the estimated pose by one metre. What next?</p>
+      <div class="answers"><button type="button" data-choice="increment">Increment now</button><button type="button" data-choice="previous">Keep previous</button></div>
+      <div class="feedback" role="status"></div>
+    </div>
+  </div>
+
+  <h2>6. PX4 source exercise</h2>
+  <div class="source-exercise">
+    <p><strong>Goal:</strong> predict which parts of a partial external-odometry sample EKF2 can use, then verify that prediction from the call path.</p>
+    <ol>
+      <li>Open <a href="../../msg/versioned/VehicleOdometry.msg"><code>VehicleOdometry.msg</code></a>. Record the allowed pose and velocity frames, invalid markers, quaternion order, units, and reset semantics.</li>
+      <li>Construct this prediction before reading EKF2: pose is finite in NED, velocity is all NaN, quaternion is identity, and <code>reset_counter</code> changes from 4 to 5. State which measurements should be accepted, which should be ignored, which time should be used, and which reset value should propagate.</li>
+      <li>Open <a href="../../src/modules/ekf2/EKF2.cpp"><code>EKF2.cpp</code></a> and locate <code>UpdateExtVisionSample()</code>. Follow the finite-value checks, frame switches, quaternion validation, <code>timestamp_sample</code>, and <code>reset_counter</code>. Compare every branch with your prediction.</li>
+      <li>Run SITL and inspect <code>listener vehicle_odometry -n 1</code>. Annotate the actual pose frame, velocity frame, quaternion, variances, timestamps, and reset counter. Do not assume that the estimator-output topic and external-input topic have the same producer.</li>
+    </ol>
+    <p><strong>Evidence to keep:</strong> source locations, packet prediction, observed listener sample, and one sentence distinguishing stationary velocity from unavailable velocity.</p>
+  </div>
+
+  <h2>Where this fits</h2>
+  <p>Review <a href="0001-frames-before-quaternions.html">Lesson 0001</a> whenever a frame label feels abstract. Continue to <a href="0003-quaternions-as-rotations.html">Lesson 0003</a> to understand the orientation field instead of treating its four quaternion numbers as magic.</p>
+  <p class="sources">Primary sources: <a href="../../msg/versioned/VehicleOdometry.msg">PX4 VehicleOdometry.msg</a>, <a href="https://docs.px4.io/main/en/computer_vision/visual_inertial_odometry">PX4 Visual Inertial Odometry guide</a>, <a href="https://mavlink.io/en/messages/common.html#ODOMETRY">MAVLink ODOMETRY</a>, and <a href="../../src/modules/ekf2/EKF2.cpp">PX4 EKF2.cpp</a>. Ask your agent whenever a field’s frame, time, or invalid-value behavior remains uncertain.</p>
+</article>
+
+<script>
+(() => {
+  const poseFrame = document.getElementById('pose-frame');
+  const velocityFrame = document.getElementById('velocity-frame');
+  const positionState = document.getElementById('position-state');
+  const velocityState = document.getElementById('velocity-state');
+  const continuityState = document.getElementById('continuity-state');
+  const uncertainty = document.getElementById('uncertainty');
+  const sigmaOutput = document.getElementById('sigma-output');
+  const varianceOutput = document.getElementById('variance-output');
+  const resetOutput = document.getElementById('reset-output');
+  const packetOutput = document.getElementById('packet-output');
+  const packetNote = document.getElementById('packet-note');
+
+  const render = () => {
+    const sigma = Number(uncertainty.value);
+    const variance = sigma * sigma;
+    const position = positionState.value === 'known' ? '[2.0, -1.0, -0.5]' : '[NaN, NaN, NaN]';
+    const velocities = {
+      moving:'[1.0, 0.0, 0.0]',
+      stationary:'[0.0, 0.0, 0.0]',
+      unknown:'[NaN, NaN, NaN]'
+    };
+    const reset = continuityState.value === 'reset' ? 8 : 7;
+    sigmaOutput.textContent = `${sigma.toFixed(2)} m`;
+    varianceOutput.textContent = `${variance.toFixed(3)} m²`;
+    resetOutput.textContent = String(reset);
+    packetOutput.textContent = [
+      'vehicle_odometry {',
+      '  timestamp:        12,045,000 us  // received',
+      '  timestamp_sample: 12,000,000 us  // captured',
+      `  pose_frame:       POSE_FRAME_${poseFrame.value}`,
+      `  position:         ${position}`,
+      '  q:                [1.0, 0.0, 0.0, 0.0]',
+      `  velocity_frame:   VELOCITY_FRAME_${velocityFrame.value}`,
+      `  velocity:         ${velocities[velocityState.value]}`,
+      `  position_variance:[${variance.toFixed(3)}, ${variance.toFixed(3)}, ${variance.toFixed(3)}]`,
+      `  reset_counter:    ${reset}`,
+      '}'
+    ].join('\n');
+
+    const statements = [];
+    statements.push(positionState.value === 'known' ? 'Position is available.' : 'Position is explicitly unavailable.');
+    if (velocityState.value === 'stationary') statements.push('Zero velocity asserts measured stationary motion.');
+    if (velocityState.value === 'unknown') statements.push('NaN velocity withholds a velocity measurement.');
+    if (velocityState.value === 'moving') statements.push(`Velocity is expressed in ${velocityFrame.value}.`);
+    if (continuityState.value === 'reset') statements.push('The incremented counter announces a discontinuity.');
+    packetNote.textContent = statements.join(' ');
+    packetNote.className = `note ${positionState.value === 'unknown' || velocityState.value === 'unknown' ? 'unknown' : 'known'}`;
+  };
+
+  [poseFrame, velocityFrame, positionState, velocityState, continuityState, uncertainty]
+    .forEach(control => control.addEventListener('input', render));
+
+  document.querySelectorAll('.question').forEach(question => {
+    question.querySelectorAll('button').forEach(button => {
+      button.addEventListener('click', () => {
+        const correct = button.dataset.choice === question.dataset.answer;
+        question.querySelectorAll('button').forEach(candidate => candidate.classList.remove('correct', 'wrong'));
+        button.classList.add(correct ? 'correct' : 'wrong');
+        question.querySelector('.feedback').textContent = correct
+          ? 'Correct. The message now preserves the producer’s actual knowledge.'
+          : 'Not quite. Recheck the table above and distinguish a measurement from missing information.';
+      });
+    });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

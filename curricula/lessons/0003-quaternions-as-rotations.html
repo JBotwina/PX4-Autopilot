@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quaternions as Rotations — PX4 Orientation Math</title>
+  <style>
+    :root {
+      color-scheme:light dark;
+      --paper:#f8f7f4; --ink:#191f24; --muted:#626e76; --line:#ccd2d4;
+      --panel:#fff; --soft:#f0f1ed; --primary:#7051a3; --secondary:#cf7729;
+      --actual:#23824b; --inverse:#b64b87; --bad:#b4472f; --good:#187346;
+      --shadow:0 12px 32px rgba(36,39,48,.09);
+    }
+    @media (prefers-color-scheme:dark) {
+      :root {
+        --paper:#111517; --ink:#eef1f3; --muted:#a9b2b7; --line:#414a4f;
+        --panel:#191f22; --soft:#22282a; --primary:#b99ae5; --secondary:#f2a35e;
+        --actual:#76d69b; --inverse:#eda0d0; --bad:#ff987d; --good:#80dda5;
+        --shadow:none;
+      }
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.62 ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    article { max-width:960px; margin:auto; padding:48px 26px 84px; }
+    h1,h2,h3 { font-family:ui-serif,Georgia,serif; line-height:1.15; }
+    h1 { max-width:760px; margin:7px 0 12px; font-size:clamp(34px,6vw,54px); font-weight:600; }
+    h2 { margin:45px 0 12px; font-size:28px; } h3 { margin:27px 0 8px; font-size:21px; }
+    p { max-width:74ch; }
+    a { color:var(--primary); }
+    code { padding:.08em .3em; border-radius:4px; background:var(--soft); }
+    .kicker { color:var(--muted); font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+    .win { max-width:780px; padding:15px 17px; border-left:4px solid var(--primary); background:var(--soft); }
+    .equation { margin:13px 0; padding:13px 16px; overflow:auto; border-left:4px solid var(--inverse); background:var(--soft); font:16px/1.72 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .terms { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin:20px 0; }
+    .term { padding:16px; border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+    .term strong { display:block; margin-bottom:5px; } .term p { margin:0; color:var(--muted); }
+    .lab { margin:25px 0 18px; padding:20px; border:1px solid var(--line); border-radius:14px; background:var(--panel); box-shadow:var(--shadow); }
+    .presets { display:flex; flex-wrap:wrap; gap:9px; margin-bottom:15px; }
+    button { padding:9px 13px; color:var(--ink); background:var(--soft); border:1px solid var(--line); border-radius:7px; font:600 14px/1.2 inherit; cursor:pointer; }
+    button:hover { border-color:var(--primary); }
+    button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible { outline:3px solid color-mix(in srgb,var(--primary) 45%,transparent); outline-offset:2px; }
+    .primary { color:var(--panel); background:var(--primary); border-color:var(--primary); }
+    .controls { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:16px 24px; align-items:end; }
+    label { display:grid; gap:6px; font-weight:600; }
+    input[type="range"] { width:100%; accent-color:var(--primary); }
+    input[type="number"] { width:100%; padding:9px 10px; color:var(--ink); background:var(--paper); border:1px solid var(--line); border-radius:7px; font:inherit; }
+    .switch { display:flex; align-items:center; gap:9px; min-height:45px; }
+    .switch input { width:19px; height:19px; accent-color:var(--inverse); }
+    .stage { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin-top:14px; }
+    .diagram { display:block; width:100%; }
+    .diagram .ring { fill:none; stroke:var(--line); stroke-width:2; }
+    .diagram .axis { stroke:var(--line); stroke-width:1; }
+    .diagram .main-ray { stroke:var(--primary); stroke-width:5; }
+    .diagram .inverse-ray { stroke:var(--inverse); stroke-width:3; stroke-dasharray:7 5; }
+    .diagram .body { fill:color-mix(in srgb,var(--primary) 24%,transparent); stroke:var(--primary); stroke-width:3; }
+    .diagram .point { fill:var(--primary); stroke:var(--panel); stroke-width:3; }
+    .diagram .inverse-point { fill:var(--inverse); stroke:var(--panel); stroke-width:3; }
+    .diagram .half-arc { fill:none; stroke:var(--secondary); stroke-width:3; }
+    .diagram text { fill:var(--ink); font:600 12px ui-sans-serif,system-ui,sans-serif; paint-order:stroke; stroke:var(--panel); stroke-width:4; stroke-linejoin:round; }
+    .diagram .muted-label { fill:var(--muted); text-anchor:middle; dominant-baseline:middle; }
+    .metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:13px; }
+    .metric { min-width:0; padding:12px; border:1px solid var(--line); border-radius:9px; background:var(--paper); }
+    .metric span { display:block; color:var(--muted); font-size:12px; }
+    .metric output { display:block; font:600 22px/1.25 ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap:anywhere; }
+    .status { min-height:1.5em; margin:11px 0 0; font-weight:600; }
+    .pipeline { display:grid; grid-template-columns:1fr auto 1fr auto 1fr; gap:9px; align-items:center; margin-top:18px; }
+    .node { min-width:0; padding:13px; border:1px solid var(--line); border-radius:9px; background:var(--paper); }
+    .node span { display:block; margin-bottom:5px; color:var(--muted); font-size:12px; }
+    .node code { display:block; overflow-wrap:anywhere; background:transparent; padding:0; }
+    .operator { color:var(--muted); font:600 21px ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .check { margin-top:15px; padding:12px 14px; border-left:4px solid var(--actual); background:var(--soft); }
+    .check code { background:transparent; }
+    .practice { padding:18px; border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+    .practice-grid { display:grid; grid-template-columns:1fr 1fr auto; gap:12px; align-items:end; }
+    .feedback { min-height:1.6em; margin:9px 0 0; font-weight:600; }
+    details { padding:14px 16px; border:1px solid var(--line); border-radius:9px; background:var(--panel); }
+    summary { cursor:pointer; font-weight:700; }
+    .sources { color:var(--muted); font-size:14px; }
+    @media (max-width:720px) { .pipeline { grid-template-columns:1fr; } .operator { text-align:center; transform:rotate(90deg); } }
+    @media (max-width:620px) { article { padding:34px 17px 62px; } .terms,.stage,.controls,.practice-grid { grid-template-columns:1fr; } .metrics { grid-template-columns:1fr; } .lab { padding:14px; } }
+    @media print { :root { --paper:#fff; --panel:#fff; --ink:#000; --muted:#444; --line:#aaa; --soft:#f3f3f3; --shadow:none; } button,.practice { display:none; } article { max-width:none; padding:0; } }
+  </style>
+</head>
+<body>
+<article>
+  <nav class="kicker" aria-label="Lesson navigation"><a href="0002-px4-odometry-contract.html">← Previous: 0002</a> · <a href="index.html">All lessons</a> · <a href="0004-gimbal-lock-and-quaternions.html">Next: 0004 →</a></nav>
+  <div class="kicker">Lesson 0003 · PX4 orientation math</div>
+  <h1>Quaternions are rotations you can compose</h1>
+  <p class="win"><strong>Tangible win:</strong> after this lesson you can read a yaw-only quaternion, reverse it with an inverse, and follow the PX4 conversion <code>q_vehicle⁻¹ × q_target</code>.</p>
+  <p>A quaternion is not a mysterious four-dimensional heading. For this lesson, treat it as a carefully designed container for two things: a rotation axis and an amount of rotation.</p>
+
+  <h2>1. Learn the four slots</h2>
+  <div class="terms">
+    <div class="term"><strong><code>w</code> — scalar part</strong><p>Stores the cosine of half the rotation angle.</p></div>
+    <div class="term"><strong><code>[x,y,z]</code> — vector part</strong><p>Points along the rotation axis, scaled by the sine of half the angle.</p></div>
+  </div>
+  <div class="equation">q = [ cos(θ/2), axisₓ·sin(θ/2), axisᵧ·sin(θ/2), axis_z·sin(θ/2) ]</div>
+  <p>PX4 uses Hamilton quaternions in scalar-first order: <code>[w,x,y,z]</code>. A pure yaw turns around the Z/down axis, so <code>x=0</code> and <code>y=0</code>:</p>
+  <div class="equation">q_yaw(ψ) = [ cos(ψ/2), 0, 0, sin(ψ/2) ]</div>
+
+  <h2>2. Watch physical angle become quaternion angle</h2>
+  <p>The left circle shows the vehicle. The right circle plots <code>w</code> horizontally and <code>z</code> vertically. Move the yaw and notice that the quaternion point travels through only half the angle.</p>
+
+  <section class="lab" id="quaternion-lab" aria-label="Interactive yaw quaternion encoder">
+    <div class="presets" aria-label="Yaw presets">
+      <button type="button" data-yaw="0">0°</button><button type="button" class="primary" data-yaw="90">90°</button>
+      <button type="button" data-yaw="180">180°</button><button type="button" data-yaw="360">360°</button>
+    </div>
+    <div class="controls">
+      <label for="yaw-slider">Physical yaw <output id="yaw-value">+90°</output>
+        <input id="yaw-slider" type="range" min="-360" max="360" value="90" step="1">
+      </label>
+      <label class="switch" for="show-inverse"><input id="show-inverse" type="checkbox"> Show inverse</label>
+    </div>
+    <div class="stage">
+      <svg class="diagram" viewBox="0 0 330 310" role="img" aria-labelledby="physical-title physical-desc">
+        <title id="physical-title">Physical yaw compass</title><desc id="physical-desc">The selected vehicle yaw and its inverse on a north-east compass.</desc>
+        <line class="axis" x1="165" y1="30" x2="165" y2="280"></line><line class="axis" x1="40" y1="155" x2="290" y2="155"></line>
+        <circle class="ring" cx="165" cy="155" r="112"></circle>
+        <text class="muted-label" x="165" y="24">N · 0°</text><text class="muted-label" x="309" y="155">E · +90°</text>
+        <text class="muted-label" x="165" y="292">S · ±180°</text><text class="muted-label" x="20" y="155">W · −90°</text>
+        <line class="main-ray" id="physical-ray" x1="165" y1="155" x2="265" y2="155"></line>
+        <line class="inverse-ray" id="physical-inverse-ray" x1="165" y1="155" x2="65" y2="155" visibility="hidden"></line>
+        <g id="vehicle-shape" transform="translate(165 155) rotate(90)"><path class="body" d="M0 -45 L17 28 L0 17 L-17 28Z"></path></g>
+        <text id="physical-label" x="273" y="148">yaw +90°</text><text id="physical-inverse-label" x="57" y="148" text-anchor="end" visibility="hidden">inverse −90°</text>
+      </svg>
+      <svg class="diagram" viewBox="0 0 330 310" role="img" aria-labelledby="unit-title unit-desc">
+        <title id="unit-title">Yaw quaternion unit circle</title><desc id="unit-desc">The w and z components at half the selected physical yaw angle.</desc>
+        <line class="axis" x1="35" y1="155" x2="295" y2="155"></line><line class="axis" x1="165" y1="25" x2="165" y2="285"></line>
+        <circle class="ring" cx="165" cy="155" r="112"></circle>
+        <text class="muted-label" x="306" y="155">w +1</text><text class="muted-label" x="24" y="155">w −1</text>
+        <text class="muted-label" x="165" y="17">z +1</text><text class="muted-label" x="165" y="296">z −1</text>
+        <path class="half-arc" id="half-arc"></path>
+        <line class="main-ray" id="q-ray" x1="165" y1="155" x2="244.2" y2="75.8"></line><circle class="point" id="q-point" cx="244.2" cy="75.8" r="7"></circle>
+        <text id="q-label" x="254" y="68">q at +45°</text>
+        <line class="inverse-ray" id="q-inverse-ray" x1="165" y1="155" x2="244.2" y2="234.2" visibility="hidden"></line>
+        <circle class="inverse-point" id="q-inverse-point" cx="244.2" cy="234.2" r="7" visibility="hidden"></circle>
+        <text id="q-inverse-label" x="254" y="244" visibility="hidden">q⁻¹ at −45°</text>
+      </svg>
+    </div>
+    <div class="metrics">
+      <div class="metric"><span>Physical yaw</span><output id="angle-metric">+90°</output></div>
+      <div class="metric"><span>Half-angle</span><output id="half-metric">+45°</output></div>
+      <div class="metric"><span>Quaternion [w,x,y,z]</span><output id="vector-metric">[0.707, 0, 0, 0.707]</output></div>
+    </div>
+    <p class="status" id="encoder-status" role="status">The quaternion point travels half as far around its circle as the vehicle rotates.</p>
+  </section>
+
+  <h2>3. Why use a half-angle?</h2>
+  <p>PX4 rotates a vector by placing the vector between the quaternion and its inverse:</p>
+  <div class="equation">v_rotated = q × [0,v] × q⁻¹</div>
+  <p>The quaternion participates twice—once on each side. Encoding half the desired angle makes the complete sandwich produce the full physical rotation. You do not need to expand that multiplication yet; remember the operational rule: <strong>physical angle goes in, half-angle appears inside <code>q</code></strong>.</p>
+
+  <h2>4. The inverse means “undo this rotation”</h2>
+  <p>For a unit quaternion, inversion is pleasantly simple:</p>
+  <div class="equation">q⁻¹ = [w, −x, −y, −z]</div>
+  <p>Toggle <strong>Show inverse</strong> above. On the quaternion circle it reflects across the <code>w</code> axis. On the physical compass it reverses the rotation. Applying a rotation and then its inverse returns the identity:</p>
+  <div class="equation">q × q⁻¹ = [1,0,0,0]</div>
+
+  <h2>5. Multiplication means “compose rotations”</h2>
+  <p>PX4's Hamilton convention uses this order:</p>
+  <div class="equation">q_result = q₂ × q₁&nbsp;&nbsp;&nbsp;means&nbsp;&nbsp;&nbsp;first q₁, then q₂</div>
+  <p>For yaw-only rotations, composition behaves like angle addition. In full 3D, multiplication order matters: roll-then-yaw is generally different from yaw-then-roll.</p>
+
+  <h2>6. Apply it to the gimbal PR</h2>
+  <p>The vehicle quaternion maps the vehicle frame into earth. The target quaternion also ends in earth. To express the target relative to the vehicle, first undo the vehicle rotation:</p>
+  <div class="equation">q_joint = q_vehicle⁻¹ × q_target</div>
+
+  <section class="lab" id="conversion-lab" aria-label="Interactive PX4 quaternion frame conversion">
+    <div class="controls">
+      <label for="vehicle-yaw">Vehicle earth yaw <output id="vehicle-yaw-value">+90°</output>
+        <input id="vehicle-yaw" type="range" min="-180" max="180" value="90" step="1">
+      </label>
+      <label for="target-yaw">Target earth yaw <output id="target-yaw-value">0°</output>
+        <input id="target-yaw" type="range" min="-180" max="180" value="0" step="1">
+      </label>
+    </div>
+    <div class="pipeline" aria-label="Quaternion conversion pipeline">
+      <div class="node"><span>Inverse vehicle</span><code id="inverse-node">[0.707, 0, 0, −0.707]</code></div>
+      <div class="operator" aria-hidden="true">×</div>
+      <div class="node"><span>Earth target</span><code id="target-node">[1.000, 0, 0, 0.000]</code></div>
+      <div class="operator" aria-hidden="true">=</div>
+      <div class="node"><span>Vehicle-relative joint</span><code id="joint-node">[0.707, 0, 0, −0.707]</code></div>
+    </div>
+    <div class="metrics">
+      <div class="metric"><span>Vehicle yaw</span><output id="vehicle-result">+90°</output></div>
+      <div class="metric"><span>Joint yaw</span><output id="joint-result">−90°</output></div>
+      <div class="metric"><span>Recomposed earth yaw</span><output id="recomposed-result">0°</output></div>
+    </div>
+    <div class="check" id="composition-check"><code>q_vehicle × q_joint = q_target</code> ✓</div>
+  </section>
+
+  <h2>7. Retrieve it</h2>
+  <div class="practice">
+    <p>A pure <code>+90°</code> yaw has <code>x=0</code> and <code>y=0</code>. Predict <code>w</code> and <code>z</code> to three decimals.</p>
+    <div class="practice-grid">
+      <label for="answer-w">w<input id="answer-w" type="number" step="0.001" placeholder="0.000"></label>
+      <label for="answer-z">z<input id="answer-z" type="number" step="0.001" placeholder="0.000"></label>
+      <button type="button" id="check-answer">Check prediction</button>
+    </div>
+    <p class="feedback" id="answer-feedback" role="status"></p>
+  </div>
+
+  <h2>8. One strange but useful fact</h2>
+  <details>
+    <summary>Why do 0° and 360° show different quaternion numbers?</summary>
+    <p>The 0° quaternion is <code>[1,0,0,0]</code>. The 360° quaternion is <code>[−1,0,0,0]</code>. These are negatives of each other, but they represent the same physical orientation. In general, <code>q</code> and <code>−q</code> describe the same rotation. This is called the quaternion double cover.</p>
+  </details>
+
+  <h2>9. PX4 source exercise</h2>
+  <div class="practice">
+    <p><strong>Goal:</strong> justify the PR expression from PX4's quaternion contract rather than memorizing it.</p>
+    <ol>
+      <li>Read the convention comment at the top of <a href="../../src/lib/matrix/matrix/Quaternion.hpp"><code>Quaternion.hpp</code></a>. Record what <code>q2 * q1</code> means and how a vector is rotated.</li>
+      <li>Locate <code>operator*</code>, <code>inversed()</code>, and <code>rotateVector()</code>. For each function, write its physical purpose before reading its component formula.</li>
+      <li>In <a href="../../src/modules/simulation/gz_bridge/GZGimbal.cpp"><code>GZGimbal.cpp</code></a>, locate the direct quaternion-to-Euler conversion. Predict the difference between that path and <code>q_vehicle.inversed() * q_target</code> for vehicle yaw <code>+90°</code> and earth target <code>0°</code>.</li>
+      <li>Write or extend a matrix unit test that verifies both <code>q_vehicle * q_joint == q_target</code> and equality of the rotated forward vector. Include a <code>q</code> versus <code>-q</code> case so raw component equality cannot accidentally become the test oracle.</li>
+    </ol>
+    <p><strong>Evidence to keep:</strong> source paths, predicted joint quaternion, test inputs, and assertion results.</p>
+  </div>
+
+  <h2>Keep nearby</h2>
+  <p>Review <a href="0001-frames-before-quaternions.html">lesson 0001</a> when frame subtraction feels uncertain. Use the <a href="../reference/quaternion-rotation-cheat-sheet.html">quaternion rotation cheat sheet</a> while reading PX4 code.</p>
+  <p class="sources">Primary sources: <a href="../../src/lib/matrix/matrix/Quaternion.hpp">PX4 Quaternion.hpp</a> for Hamilton multiplication, inverse, and vector rotation; <a href="../../msg/versioned/VehicleAttitude.msg">PX4 VehicleAttitude.msg</a> for <code>[w,x,y,z]</code> and FRD-to-NED semantics. Ask your agent about any step that still feels like symbol manipulation rather than a physical rotation.</p>
+</article>
+
+<script>
+(() => {
+  const encoder = document.getElementById('quaternion-lab');
+  const yawSlider = encoder.querySelector('#yaw-slider');
+  const yawValue = encoder.querySelector('#yaw-value');
+  const showInverse = encoder.querySelector('#show-inverse');
+  const physicalRay = encoder.querySelector('#physical-ray');
+  const physicalInverseRay = encoder.querySelector('#physical-inverse-ray');
+  const vehicleShape = encoder.querySelector('#vehicle-shape');
+  const physicalLabel = encoder.querySelector('#physical-label');
+  const physicalInverseLabel = encoder.querySelector('#physical-inverse-label');
+  const qRay = encoder.querySelector('#q-ray');
+  const qPoint = encoder.querySelector('#q-point');
+  const qLabel = encoder.querySelector('#q-label');
+  const qInverseRay = encoder.querySelector('#q-inverse-ray');
+  const qInversePoint = encoder.querySelector('#q-inverse-point');
+  const qInverseLabel = encoder.querySelector('#q-inverse-label');
+  const halfArc = encoder.querySelector('#half-arc');
+  const angleMetric = encoder.querySelector('#angle-metric');
+  const halfMetric = encoder.querySelector('#half-metric');
+  const vectorMetric = encoder.querySelector('#vector-metric');
+  const encoderStatus = encoder.querySelector('#encoder-status');
+  const center = {x:165,y:155};
+
+  const fmtAngle = value => `${value > 0 ? '+' : ''}${Math.round(value)}°`;
+  const fmtNumber = value => Math.abs(value) < 0.0005 ? '0.000' : value.toFixed(3);
+  const physicalPoint = (angle, radius) => {
+    const radians = (angle - 90) * Math.PI / 180;
+    return {x:center.x + radius * Math.cos(radians), y:center.y + radius * Math.sin(radians)};
+  };
+  const unitPoint = (angle, radius) => {
+    const radians = angle * Math.PI / 180;
+    return {x:center.x + radius * Math.cos(radians), y:center.y - radius * Math.sin(radians)};
+  };
+  const setLine = (line, point) => { line.setAttribute('x2', point.x.toFixed(2)); line.setAttribute('y2', point.y.toFixed(2)); };
+  const placeLabel = (label, point) => {
+    const right = point.x >= center.x;
+    label.setAttribute('x', (point.x + (right ? 10 : -10)).toFixed(2));
+    label.setAttribute('y', (point.y + (point.y >= center.y ? 14 : -8)).toFixed(2));
+    label.setAttribute('text-anchor', right ? 'start' : 'end');
+  };
+  const arc = (angle, radius) => {
+    if (Math.abs(angle) < 1) return '';
+    const start = unitPoint(0,radius), end = unitPoint(angle,radius);
+    return `M${start.x.toFixed(2)} ${start.y.toFixed(2)} A${radius} ${radius} 0 ${Math.abs(angle)>180?1:0} ${angle>=0?0:1} ${end.x.toFixed(2)} ${end.y.toFixed(2)}`;
+  };
+
+  function updateEncoder() {
+    const yaw = Number(yawSlider.value), half = yaw / 2, radians = half * Math.PI / 180;
+    const w = Math.cos(radians), z = Math.sin(radians);
+    const p = physicalPoint(yaw,100), pi = physicalPoint(-yaw,100), q = unitPoint(half,112), qi = unitPoint(-half,112);
+    yawValue.value = fmtAngle(yaw); vehicleShape.setAttribute('transform',`translate(165 155) rotate(${yaw})`);
+    setLine(physicalRay,p); physicalLabel.textContent=`yaw ${fmtAngle(yaw)}`; placeLabel(physicalLabel,p);
+    setLine(physicalInverseRay,pi); physicalInverseLabel.textContent=`inverse ${fmtAngle(-yaw)}`; placeLabel(physicalInverseLabel,pi);
+    setLine(qRay,q); qPoint.setAttribute('cx',q.x.toFixed(2)); qPoint.setAttribute('cy',q.y.toFixed(2)); qLabel.textContent=`q at ${fmtAngle(half)}`; placeLabel(qLabel,q);
+    setLine(qInverseRay,qi); qInversePoint.setAttribute('cx',qi.x.toFixed(2)); qInversePoint.setAttribute('cy',qi.y.toFixed(2)); qInverseLabel.textContent=`q⁻¹ at ${fmtAngle(-half)}`; placeLabel(qInverseLabel,qi);
+    halfArc.setAttribute('d',arc(half,54));
+    [physicalInverseRay,physicalInverseLabel,qInverseRay,qInversePoint,qInverseLabel].forEach(element=>element.setAttribute('visibility',showInverse.checked?'visible':'hidden'));
+    angleMetric.value=fmtAngle(yaw); halfMetric.value=fmtAngle(half); vectorMetric.value=`[${fmtNumber(w)}, 0, 0, ${fmtNumber(z)}]`;
+    encoderStatus.textContent=Math.abs(Math.abs(yaw)-360)<1?'The endpoint is −identity: different numbers, same physical orientation as 0°.':showInverse.checked?'The inverse keeps w and negates the vector part, reversing the physical rotation.':'The quaternion point travels half as far around its circle as the vehicle rotates.';
+  }
+  yawSlider.addEventListener('input',updateEncoder); showInverse.addEventListener('input',updateEncoder);
+  encoder.querySelectorAll('[data-yaw]').forEach(button=>button.addEventListener('click',()=>{yawSlider.value=button.dataset.yaw;updateEncoder();}));
+
+  const conversion = document.getElementById('conversion-lab');
+  const vehicleYaw = conversion.querySelector('#vehicle-yaw');
+  const targetYaw = conversion.querySelector('#target-yaw');
+  const wrap = value => ((value + 180) % 360 + 360) % 360 - 180;
+  const yawQuaternion = degrees => { const h=degrees*Math.PI/360; return [Math.cos(h),0,0,Math.sin(h)]; };
+  const inverseQuaternion = q => [q[0],-q[1],-q[2],-q[3]];
+  const multiply = (a,b) => [
+    a[0]*b[0]-a[1]*b[1]-a[2]*b[2]-a[3]*b[3],
+    a[0]*b[1]+a[1]*b[0]+a[2]*b[3]-a[3]*b[2],
+    a[0]*b[2]-a[1]*b[3]+a[2]*b[0]+a[3]*b[1],
+    a[0]*b[3]+a[1]*b[2]-a[2]*b[1]+a[3]*b[0]
+  ];
+  const fmtQuaternion = q => `[${q.map(fmtNumber).join(', ')}]`;
+  const quaternionYaw = q => wrap(2*Math.atan2(q[3],q[0])*180/Math.PI);
+
+  function updateConversion() {
+    const v=Number(vehicleYaw.value),t=Number(targetYaw.value),qv=yawQuaternion(v),qt=yawQuaternion(t),qvi=inverseQuaternion(qv),qj=multiply(qvi,qt),recomposed=multiply(qv,qj);
+    conversion.querySelector('#vehicle-yaw-value').value=fmtAngle(v); conversion.querySelector('#target-yaw-value').value=fmtAngle(t);
+    conversion.querySelector('#inverse-node').textContent=fmtQuaternion(qvi); conversion.querySelector('#target-node').textContent=fmtQuaternion(qt); conversion.querySelector('#joint-node').textContent=fmtQuaternion(qj);
+    conversion.querySelector('#vehicle-result').value=fmtAngle(v); conversion.querySelector('#joint-result').value=fmtAngle(quaternionYaw(qj)); conversion.querySelector('#recomposed-result').value=fmtAngle(quaternionYaw(recomposed));
+  }
+  vehicleYaw.addEventListener('input',updateConversion); targetYaw.addEventListener('input',updateConversion);
+
+  const answerW=document.getElementById('answer-w'),answerZ=document.getElementById('answer-z'),feedback=document.getElementById('answer-feedback');
+  document.getElementById('check-answer').addEventListener('click',()=>{
+    if(answerW.value===''||answerZ.value===''){feedback.textContent='Enter both components first.';return;}
+    const correct=Math.abs(Number(answerW.value)-Math.SQRT1_2)<0.006&&Math.abs(Number(answerZ.value)-Math.SQRT1_2)<0.006;
+    feedback.textContent=correct?'Correct: w ≈ 0.707 and z ≈ 0.707. Their squares add to one.':'Try again: both values use 45°, which is half of the 90° physical yaw.';
+  });
+  updateEncoder(); updateConversion();
+})();
+</script>
+</body>
+</html>
