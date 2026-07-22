@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SLAM Drift and Loop Closure — Quick Reference</title>
+  <style>
+    :root { color-scheme:light dark; --paper:#faf8f3; --ink:#182226; --muted:#5e6b70; --line:#c9d0d1; --soft:#eaf0ef; --local:#19766f; --global:#b75b2c; }
+    @media (prefers-color-scheme:dark) { :root { --paper:#111718; --ink:#edf3f2; --muted:#a7b3b5; --line:#435053; --soft:#1c2628; --local:#62c8bd; --global:#f0a074; } }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.54 ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    main { max-width:940px; margin:auto; padding:36px 26px 58px; }
+    h1,h2 { font-family:ui-serif,Georgia,serif; line-height:1.15; }
+    h1 { margin:0 0 6px; font-size:34px; } h2 { margin:25px 0 8px; font-size:21px; }
+    .subtitle,.muted { color:var(--muted); } .subtitle { margin:0 0 22px; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px 28px; }
+    .block { break-inside:avoid; }
+    .equation { padding:11px 14px; border-left:4px solid var(--local); background:var(--soft); font:15px/1.66 ui-monospace,SFMono-Regular,Menlo,monospace; overflow:auto; }
+    .global { border-left-color:var(--global); }
+    table { width:100%; border-collapse:collapse; } th,td { padding:8px 9px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:var(--muted); } code { padding:.08em .3em; border-radius:3px; background:var(--soft); } a { color:var(--local); }
+    @media (max-width:650px) { .grid { grid-template-columns:1fr; } main { padding:28px 18px 44px; } }
+    @media print { :root { --paper:white; --ink:black; --muted:#444; --line:#aaa; --soft:#f3f3f3; --local:#222; --global:#555; } main { max-width:none; padding:0; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>SLAM drift and loop closure</h1>
+  <p class="subtitle">The correction changes global consistency; it must not masquerade as instantaneous vehicle motion</p>
+  <div class="grid">
+    <section class="block"><h2>Why drift accumulates</h2><p>Each relative motion estimate contains error. Later estimates build on earlier ones, so small errors in observations, calibration, timing, translation, and rotation accumulate.</p></section>
+    <section class="block"><h2>What loop closure adds</h2><p>Place recognition and geometric verification connect the current observation to an earlier place. This long-range constraint lets optimization revise the trajectory and map.</p></section>
+    <section class="block"><h2>Front end</h2><p>Consumes sensor data, tracks features, associates observations, estimates current motion, and creates constraints or keyframes.</p></section>
+    <section class="block"><h2>Back end</h2><p>Optimizes poses and landmarks from constraints. It may perform local mapping, loop correction, map merging, or global bundle adjustment.</p></section>
+  </div>
+  <h2>Frame split</h2>
+  <div class="equation">T_map_body = T_map_odom · T_odom_body</div>
+  <table>
+    <thead><tr><th>Transform</th><th>Desired property</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td><code>T_odom_body</code></td><td>Continuous, locally accurate; may drift</td><td>Local planning and immediate control</td></tr>
+      <tr><td><code>T_map_odom</code></td><td>May change with global corrections</td><td>Reconciles smooth odometry with the corrected map</td></tr>
+      <tr><td><code>T_map_body</code></td><td>Globally consistent; may jump</td><td>Mapping, global planning, place-relative tasks</td></tr>
+    </tbody>
+  </table>
+  <h2>Do not confuse</h2>
+  <div class="grid">
+    <section class="block"><div class="equation global">loop closure<br>tracking continues + old place recognized</div></section>
+    <section class="block"><div class="equation global">relocalization<br>tracking lost + known place recovers pose</div></section>
+  </div>
+  <h2>PX4 integration check</h2>
+  <p>Before sending an external pose, record its source and destination frames, whether it is locally continuous or globally corrected, how resets are signaled, capture time, covariance, and what the receiving EKF expects.</p>
+  <p class="muted">Primary sources: <a href="https://arxiv.org/abs/2007.11898">ORB-SLAM3</a> · <a href="https://arxiv.org/abs/1606.05830">Cadena et al. SLAM survey</a> · <a href="https://www.ros.org/reps/rep-0105.html">ROS REP-105</a> · <a href="../../msg/versioned/VehicleOdometry.msg">PX4 VehicleOdometry</a></p>
+</main>
+</body>
+</html>

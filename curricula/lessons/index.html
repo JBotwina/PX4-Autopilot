@@ -82,7 +82,7 @@
   </div>
 
   <div class="summary" aria-label="Program summary">
-    <div class="metric"><strong>4</strong><span>interactive lessons used during Week 1</span></div>
+    <div class="metric"><strong>5</strong><span>interactive lessons used during Week 1</span></div>
     <div class="metric"><strong>40 h</strong><span>quaternion and SLAM/odometry curriculum</span></div>
     <div class="metric"><strong>1</strong><span>later swarm-logging roadmap</span></div>
   </div>
@@ -113,6 +113,12 @@
       <div class="placement"><strong>Day 3 · Orientation</strong><span>Prerequisite: Lesson 0003</span></div>
       <a class="open" href="0004-gimbal-lock-and-quaternions.html">Open →</a>
     </article>
+    <article class="lesson">
+      <div class="number">0006</div>
+      <div><h3>SLAM Drift and Loop Closure</h3><p>See how a long-range constraint corrects the global map while local odometry remains smooth for control.</p></div>
+      <div class="placement"><strong>Day 3 · SLAM/odometry</strong><span>Prerequisite: Lesson 0002</span></div>
+      <a class="open" href="0006-slam-drift-and-loop-closure.html">Open →</a>
+    </article>
   </div>
 
   <h2>Later curriculum · Systems and logging</h2>
@@ -134,10 +140,11 @@
     <div class="link-card"><h3><a href="../reference/gimbal-frame-math-cheat-sheet.html">Gimbal frame math</a></h3><p>Compact earth-frame versus vehicle-frame yaw conversion reference.</p></div>
     <div class="link-card"><h3><a href="../reference/quaternion-rotation-cheat-sheet.html">Quaternion rotation</a></h3><p>PX4 conventions, composition, inverse, and frame-ledger reminders.</p></div>
     <div class="link-card"><h3><a href="../reference/gimbal-lock-cheat-sheet.html">Gimbal lock</a></h3><p>Euler singularity recognition and quaternion comparison guidance.</p></div>
+    <div class="link-card"><h3><a href="../reference/slam-drift-loop-closure-cheat-sheet.html">SLAM drift and loop closure</a></h3><p>Front end, back end, long-range constraints, and the map–odom continuity split.</p></div>
     <div class="link-card"><h3><a href="../reference/px4-swarm-logging-map.html">Swarm logging map</a></h3><p>Logger, backend, MAVLink ULog transport, and fleet-collector boundaries.</p></div>
   </div>
 
-  <div class="path" aria-label="Recommended study path">0001 Frames ─┬─→ 0002 Odometry contract
+  <div class="path" aria-label="Recommended study path">0001 Frames ─┬─→ 0002 Odometry contract → 0006 SLAM drift and loop closure
              └─→ 0003 Quaternion rotation → 0004 Gimbal lock
 
 Later: modules + uORB + ULog + MAVLink → 0005 Swarm logging capstone</div>

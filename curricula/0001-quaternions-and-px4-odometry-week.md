@@ -257,6 +257,7 @@ Draw the four-frame transform chain from Day 2 and derive `T_map_body` again.
 
 #### Acquire — 60 minutes
 
+- Complete [Lesson 0006: SLAM Drift and Loop Closure](lessons/0006-slam-drift-and-loop-closure.html).
 - Read the abstract, system overview, and architecture figure of [ORB-SLAM3](https://arxiv.org/abs/2007.11898).
 - Review the front-end/back-end and robustness portions of [Cadena et al.](https://arxiv.org/abs/1606.05830).
 

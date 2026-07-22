@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SLAM Drift and Loop Closure — PX4 Odometry</title>
+  <style>
+    :root {
+      color-scheme:light dark;
+      --paper:#f6f4ef; --ink:#172126; --muted:#657177; --line:#c8d0d2;
+      --panel:#fffefb; --soft:#eaf0ef; --local:#19766f; --global:#b75b2c;
+      --truth:#4b5960; --accent:#2d608b; --good:#187346; --shadow:0 12px 34px rgba(28,43,47,.09);
+    }
+    @media (prefers-color-scheme:dark) {
+      :root {
+        --paper:#111617; --ink:#eef3f3; --muted:#a6b2b5; --line:#414c4f;
+        --panel:#192022; --soft:#212a2c; --local:#62c8bd; --global:#f0a074;
+        --truth:#aab6bb; --accent:#77add6; --good:#75d99e; --shadow:none;
+      }
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--paper); font:16px/1.62 ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    article { max-width:980px; margin:auto; padding:48px 26px 82px; }
+    h1,h2,h3 { font-family:ui-serif,Georgia,serif; line-height:1.15; }
+    h1 { max-width:800px; margin:7px 0 12px; font-size:clamp(36px,6vw,56px); font-weight:600; }
+    h2 { margin:44px 0 12px; font-size:28px; }
+    h3 { margin:0 0 7px; }
+    p { max-width:76ch; }
+    a { color:var(--accent); }
+    code { padding:.08em .3em; border-radius:4px; background:var(--soft); }
+    .kicker { color:var(--muted); font-size:12px; font-weight:750; letter-spacing:.09em; text-transform:uppercase; }
+    .win { max-width:820px; padding:15px 17px; border-left:4px solid var(--accent); background:var(--soft); }
+    .equation { margin:14px 0; padding:13px 16px; overflow:auto; border-left:4px solid var(--accent); background:var(--soft); font:16px/1.72 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin:20px 0; }
+    .card { padding:16px; border:1px solid var(--line); border-radius:11px; background:var(--panel); }
+    .card p { margin:5px 0 0; color:var(--muted); }
+    .pipeline { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin:20px 0; }
+    .stage { position:relative; padding:15px 12px; border:1px solid var(--line); border-radius:10px; background:var(--panel); text-align:center; }
+    .stage:not(:last-child)::after { content:'→'; position:absolute; right:-12px; top:50%; z-index:2; color:var(--muted); transform:translateY(-50%); }
+    .stage strong,.stage span { display:block; }
+    .stage span { margin-top:4px; color:var(--muted); font-size:13px; }
+    .front { border-top:4px solid var(--local); } .back { border-top:4px solid var(--global); }
+    .lab { margin:25px 0 18px; padding:20px; border:1px solid var(--line); border-radius:14px; background:var(--panel); box-shadow:var(--shadow); }
+    .presets { display:flex; flex-wrap:wrap; gap:9px; margin-bottom:16px; }
+    button { padding:9px 13px; color:var(--ink); background:var(--soft); border:1px solid var(--line); border-radius:7px; font:650 14px/1.2 inherit; cursor:pointer; }
+    button:hover { border-color:var(--accent); }
+    button[aria-pressed="true"] { color:var(--panel); background:var(--accent); border-color:var(--accent); }
+    button:focus-visible,input:focus-visible,summary:focus-visible { outline:3px solid color-mix(in srgb,var(--accent) 45%,transparent); outline-offset:2px; }
+    label { display:grid; gap:6px; font-weight:650; }
+    input[type="range"] { width:100%; accent-color:var(--accent); }
+    .diagram { display:block; width:100%; margin-top:14px; }
+    .diagram text { fill:var(--ink); font:600 13px ui-sans-serif,system-ui,sans-serif; paint-order:stroke; stroke:var(--panel); stroke-width:4; stroke-linejoin:round; }
+    .gridline { stroke:var(--line); stroke-width:1; }
+    .true-path { fill:none; stroke:var(--truth); stroke-width:3; stroke-dasharray:7 6; }
+    .odom-path { fill:none; stroke:var(--local); stroke-width:4; }
+    .map-path { fill:none; stroke:var(--global); stroke-width:4; }
+    .pose { stroke:var(--panel); stroke-width:3; }
+    .pose.odom { fill:var(--local); } .pose.map { fill:var(--global); }
+    .closure { fill:none; stroke:var(--global); stroke-width:3; stroke-dasharray:5 5; }
+    .legend { display:flex; flex-wrap:wrap; gap:15px; margin:7px 0 0; color:var(--muted); font-size:13px; }
+    .swatch { display:inline-block; width:20px; height:3px; margin-right:6px; vertical-align:middle; background:currentColor; }
+    .truth-key { color:var(--truth); } .odom-key { color:var(--local); } .map-key { color:var(--global); }
+    .metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:14px; }
+    .metric { padding:12px; border:1px solid var(--line); border-radius:9px; background:var(--paper); }
+    .metric span { display:block; color:var(--muted); font-size:12px; }
+    .metric output { display:block; font:650 19px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap:anywhere; }
+    .status { min-height:1.6em; margin:12px 0 0; font-weight:650; }
+    .quiz { padding:18px; border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+    .answers { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+    .answers button { min-height:62px; }
+    .feedback { min-height:1.6em; margin:10px 0 0; font-weight:650; }
+    details { padding:14px 16px; border:1px solid var(--line); border-radius:9px; background:var(--panel); }
+    summary { cursor:pointer; font-weight:700; }
+    .sources { color:var(--muted); font-size:14px; }
+    @media (max-width:720px) { .pipeline { grid-template-columns:1fr 1fr; } .stage:nth-child(2)::after { display:none; } .cards,.metrics,.answers { grid-template-columns:1fr; } }
+    @media (max-width:450px) { article { padding:34px 17px 62px; } .pipeline { grid-template-columns:1fr; } .stage::after { display:none; } .lab { padding:14px; } }
+    @media print { :root { --paper:#fff; --panel:#fff; --ink:#000; --muted:#444; --line:#aaa; --soft:#f3f3f3; --shadow:none; } button,.quiz { display:none; } article { max-width:none; padding:0; } }
+  </style>
+</head>
+<body>
+<article>
+  <nav class="kicker" aria-label="Lesson navigation"><a href="0002-px4-odometry-contract.html">← Odometry contract</a> · <a href="index.html">All lessons</a> · <a href="0004-gimbal-lock-and-quaternions.html">Orientation track</a></nav>
+  <div class="kicker">Lesson 0006 · Day 3 SLAM and PX4 odometry</div>
+  <h1>Loop closure corrects the map—not the last camera frame</h1>
+  <p class="win"><strong>Tangible win:</strong> after this lesson you can explain why odometry drifts, what a loop closure adds, and which pose must stay smooth for a flight controller.</p>
+
+  <h2>1. Retrieve the transform chain</h2>
+  <p>Before reading further, write the Day 2 chain from memory. With our convention that <code>T_A_B</code> maps coordinates from B into A, fill both blanks:</p>
+  <div class="equation">T_map_body = T_map_odom · T_odom_body<br>T_map_body = T_map_camera · __________</div>
+  <details><summary>Check only after committing an answer</summary><p>If calibration gives <code>T_body_camera</code>, invert it to obtain <code>T_camera_body</code>. Therefore <code>T_map_body = T_map_camera · T_camera_body = T_map_camera · inverse(T_body_camera)</code>.</p></details>
+
+  <h2>2. A SLAM system has two different time horizons</h2>
+  <div class="pipeline" aria-label="Simplified SLAM architecture">
+    <div class="stage front"><strong>Track</strong><span>images + IMU → current motion</span></div>
+    <div class="stage front"><strong>Associate</strong><span>match observations to features</span></div>
+    <div class="stage back"><strong>Optimize</strong><span>adjust poses and landmarks</span></div>
+    <div class="stage back"><strong>Recognize</strong><span>relocalize or close a loop</span></div>
+  </div>
+  <div class="cards">
+    <div class="card"><h3>Front end: what corresponds?</h3><p>Tracking and data association turn sensor measurements into motion estimates and constraints. They must keep up with incoming data.</p></div>
+    <div class="card"><h3>Back end: what state best fits?</h3><p>Optimization combines constraints across keyframes. A newly recognized old place can revise many earlier pose estimates.</p></div>
+  </div>
+  <p>ORB-SLAM3 makes the distinction tangible: tracking supplies real-time pose estimates, while local mapping, place recognition, map merging, and loop closing reuse keyframes across much longer spans of time.</p>
+
+  <h2>3. Why incremental odometry drifts</h2>
+  <p>Each short motion estimate has some error. The next estimate starts from the already imperfect result, so small translation, rotation, timing, calibration, and measurement errors accumulate. Odometry is locally useful but has no guarantee that returning to the starting image means returning to exactly the starting estimated pose.</p>
+  <div class="equation">many small relative estimates → accumulated pose error<br>revisiting a known place → one new long-range constraint</div>
+  <p>A loop closure is not “the algorithm noticing drift.” Place recognition proposes that a current observation matches an earlier place; geometric checks establish a constraint between the two poses; optimization then finds a trajectory and map that better satisfy all constraints.</p>
+
+  <h2>4. Scrub through a loop closure</h2>
+  <p>The dashed route is the intended closed loop. The green odometry path accumulates error. At the final keyframe, place recognition connects the current observation to the start and the global map estimate is corrected.</p>
+  <section class="lab" id="loop-lab" aria-label="Interactive SLAM loop closure timeline">
+    <div class="presets">
+      <button type="button" data-time="0">Start</button>
+      <button type="button" data-time="50">Mid-flight</button>
+      <button type="button" data-time="99" aria-pressed="true">Before closure</button>
+      <button type="button" data-time="100">Close loop</button>
+    </div>
+    <label for="timeline">Mission progress <output id="timeline-value">99%</output>
+      <input id="timeline" type="range" min="0" max="100" value="99" step="1">
+    </label>
+    <svg class="diagram" viewBox="0 0 760 380" role="img" aria-labelledby="loop-title loop-desc">
+      <title id="loop-title">Odometry drift and global loop-closure correction</title>
+      <desc id="loop-desc">A true closed rectangular path, a drifting continuous odometry path, and a globally corrected map pose at loop closure.</desc>
+      <g opacity=".6">
+        <path class="gridline" d="M80 65V325M180 65V325M280 65V325M380 65V325M480 65V325M580 65V325M680 65V325"></path>
+        <path class="gridline" d="M80 65H680M80 130H680M80 195H680M80 260H680M80 325H680"></path>
+      </g>
+      <path class="true-path" d="M135 285 L135 105 L625 105 L625 285 L135 285"></path>
+      <path class="odom-path" id="odom-path" d=""></path>
+      <path class="map-path" id="map-path" d=""></path>
+      <path class="closure" id="closure-edge" d="M168 266 Q115 225 135 285" visibility="hidden"></path>
+      <circle class="pose odom" id="odom-pose" cx="0" cy="0" r="9"></circle>
+      <circle class="pose map" id="map-pose" cx="0" cy="0" r="7" visibility="hidden"></circle>
+      <text x="103" y="307">start / known place</text>
+      <text id="closure-label" x="82" y="214" visibility="hidden">new long-range constraint</text>
+    </svg>
+    <div class="legend">
+      <span class="truth-key"><i class="swatch"></i>intended closed route</span>
+      <span class="odom-key"><i class="swatch"></i>continuous odometry</span>
+      <span class="map-key"><i class="swatch"></i>globally corrected map pose</span>
+    </div>
+    <div class="metrics">
+      <div class="metric"><span>odom → body</span><output id="odom-output">continuous</output></div>
+      <div class="metric"><span>map → body</span><output id="map-output">not corrected yet</output></div>
+      <div class="metric"><span>map → odom</span><output id="correction-output">identity</output></div>
+    </div>
+    <p class="status" id="loop-status" role="status">One more observation can connect the current pose to the starting place.</p>
+  </section>
+
+  <h2>5. Protect the controller from the global correction</h2>
+  <p>Suppose loop closure moves the best global vehicle pose by one metre. Sending that jump directly as the controller's local position can look like an impossible instantaneous motion and create a large control error.</p>
+  <div class="equation">T_map_body = T_map_odom · T_odom_body<br><br>T_odom_body stays smooth for local control<br>T_map_odom absorbs the global correction</div>
+  <p>This is the purpose of separating the frames: <code>odom</code> is continuous and locally accurate but allowed to drift; <code>map</code> is globally corrected but allowed to jump. The exact integration contract still matters—PX4 does not automatically infer ROS frame semantics from a pose stream.</p>
+
+  <h2>6. Relocalization is related, but not identical</h2>
+  <div class="cards">
+    <div class="card"><h3>Loop closure</h3><p>Tracking continues, and the system recognizes that the current place was seen earlier. The new constraint corrects accumulated inconsistency.</p></div>
+    <div class="card"><h3>Relocalization</h3><p>Tracking was lost or restarted. The system recognizes a known place to recover its pose relative to an existing map.</p></div>
+  </div>
+
+  <h2>7. Retrieve the integration decision</h2>
+  <div class="quiz" id="frame-quiz">
+    <p>A loop closure corrects the global pose by one metre. Which signal should remain continuous for immediate flight control?</p>
+    <div class="answers">
+      <button type="button" data-answer="right">Local odometry pose</button>
+      <button type="button" data-answer="wrong">Global corrected pose</button>
+      <button type="button" data-answer="wrong">Loop constraint pose</button>
+    </div>
+    <p class="feedback" id="frame-feedback" role="status"></p>
+  </div>
+
+  <h2>8. PX4 source exercise</h2>
+  <div class="quiz">
+    <p><strong>Goal:</strong> decide whether an external estimator output is safe to feed to PX4 across a loop closure.</p>
+    <ol>
+      <li><strong>Locate:</strong> open <a href="../../msg/versioned/VehicleOdometry.msg"><code>VehicleOdometry.msg</code></a>. Find <code>pose_frame</code>, <code>reset_counter</code>, timestamps, position, quaternion, and variances.</li>
+      <li><strong>Predict:</strong> write what PX4 would observe if <code>position</code> jumped by one metre while <code>reset_counter</code> did not change.</li>
+      <li><strong>Verify:</strong> use a recorded message stream, a small publisher, or a source trace into EKF2 to establish how reset and frame metadata are handled.</li>
+      <li><strong>Record:</strong> keep the source path, concrete input, observed result, and whether your proposed SLAM output is continuous odometry or globally corrected map pose.</li>
+    </ol>
+    <div class="equation">source location:<br>input and prediction:<br>verification method:<br>observed result:<br>conclusion:</div>
+  </div>
+
+  <h2>Keep nearby</h2>
+  <p>Use the <a href="../reference/slam-drift-loop-closure-cheat-sheet.html">SLAM drift and loop-closure cheat sheet</a>, revisit the <a href="0002-px4-odometry-contract.html">PX4 odometry contract</a>, and ask your agent whenever a frame name or correction policy is unclear.</p>
+  <p class="sources">Primary reading: <a href="https://arxiv.org/abs/2007.11898">Campos et al., ORB-SLAM3</a>, especially the system overview and atlas architecture. Broader foundation: <a href="https://arxiv.org/abs/1606.05830">Cadena et al., Past, Present, and Future of SLAM</a>. Frame-continuity convention: <a href="https://www.ros.org/reps/rep-0105.html">ROS REP-105</a>. PX4 contract: <a href="../../msg/versioned/VehicleOdometry.msg"><code>VehicleOdometry.msg</code></a>.</p>
+</article>
+<script>
+(() => {
+  const lab=document.getElementById('loop-lab');
+  const slider=document.getElementById('timeline');
+  const value=document.getElementById('timeline-value');
+  const odomPath=document.getElementById('odom-path');
+  const mapPath=document.getElementById('map-path');
+  const odomPose=document.getElementById('odom-pose');
+  const mapPose=document.getElementById('map-pose');
+  const edge=document.getElementById('closure-edge');
+  const edgeLabel=document.getElementById('closure-label');
+  const odomOutput=document.getElementById('odom-output');
+  const mapOutput=document.getElementById('map-output');
+  const correctionOutput=document.getElementById('correction-output');
+  const status=document.getElementById('loop-status');
+
+  const truePoint=t=>{
+    if(t<=25) return [135,285-180*(t/25)];
+    if(t<=50) return [135+490*((t-25)/25),105];
+    if(t<=75) return [625,105+180*((t-50)/25)];
+    return [625-490*((t-75)/25),285];
+  };
+  const odomPoint=t=>{
+    const [x,y]=truePoint(t);
+    const drift=t/100;
+    return [x+33*drift,y-19*drift];
+  };
+  const pointsUntil=(fn,t)=>{
+    const points=[];
+    for(let i=0;i<=t;i+=1) points.push(fn(i).map(n=>n.toFixed(1)).join(','));
+    return points.join(' ');
+  };
+  const setPose=(node,point)=>{ node.setAttribute('cx',point[0]); node.setAttribute('cy',point[1]); };
+  const update=()=>{
+    const t=Number(slider.value),closed=t===100,odom=odomPoint(t),truth=truePoint(t);
+    value.value=`${t}%`;
+    odomPath.setAttribute('d',`M ${pointsUntil(odomPoint,t).replaceAll(' ',' L ')}`);
+    mapPath.setAttribute('d',closed?`M ${pointsUntil(truePoint,t).replaceAll(' ',' L ')}`:'');
+    setPose(odomPose,odom); setPose(mapPose,truth);
+    mapPose.setAttribute('visibility',closed?'visible':'hidden');
+    edge.setAttribute('visibility',closed?'visible':'hidden'); edgeLabel.setAttribute('visibility',closed?'visible':'hidden');
+    odomOutput.value='continuous';
+    mapOutput.value=closed?'corrected −1 m':'not corrected yet';
+    correctionOutput.value=closed?'absorbs −1 m':'identity';
+    status.textContent=closed?'Loop closed: the global pose is revised while local odometry remains continuous.':t>=95?'One more observation can connect the current pose to the starting place.':'Relative estimates are useful locally, while small errors accumulate along the route.';
+    lab.querySelectorAll('[data-time]').forEach(button=>button.setAttribute('aria-pressed',String(Number(button.dataset.time)===t)));
+  };
+  slider.addEventListener('input',update);
+  lab.querySelectorAll('[data-time]').forEach(button=>button.addEventListener('click',()=>{ slider.value=button.dataset.time; update(); }));
+  update();
+
+  const quiz=document.getElementById('frame-quiz'),feedback=document.getElementById('frame-feedback');
+  quiz.querySelectorAll('[data-answer]').forEach(button=>button.addEventListener('click',()=>{
+    quiz.querySelectorAll('[data-answer]').forEach(candidate=>candidate.setAttribute('aria-pressed',String(candidate===button)));
+    feedback.textContent=button.dataset.answer==='right'?'Correct. Preserve local continuity; carry the global revision in map → odom.':'Not quite. A controller should not interpret a global correction as instantaneous vehicle motion.';
+  }));
+})();
+</script>
+</body>
+</html>

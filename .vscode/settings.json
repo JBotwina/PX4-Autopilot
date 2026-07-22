@@ -9,6 +9,7 @@
         "C_Cpp.default.cStandard": "c11",
         "C_Cpp.formatting": "Disabled",
         "C_Cpp.intelliSenseEngine": "Default",
+        "C_Cpp.errorSquiggles": "Disabled",
         "C_Cpp.vcpkg.enabled": false,
         "C_Cpp.workspaceParsingPriority": "low",
         "cmake.buildBeforeRun": true,
