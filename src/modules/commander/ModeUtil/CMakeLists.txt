@@ -35,5 +35,10 @@ add_library(mode_util
 	control_mode.cpp
 	mode_requirements.cpp
 	setpoint_types.cpp
+	setpoint_watchdog.cpp
 )
 add_dependencies(mode_util uorb_headers prebuild_targets)
+
+px4_add_unit_gtest(
+	SRC setpoint_watchdog_test.cpp
+)
