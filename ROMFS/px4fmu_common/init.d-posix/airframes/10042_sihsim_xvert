@@ -30,6 +30,15 @@ param set-default FW_AIRSPD_STALL 5
 param set-default FW_AIRSPD_MIN 6
 param set-default FW_AIRSPD_TRIM 13
 param set-default FW_AIRSPD_MAX 15
+
+# VT_ELEV_MC_LOCK 0 leaves the elevons driven by the fixed-wing rate controller
+# in hover, where they are the only source of pitch authority: the two rotors are
+# separated along the pitch axis, so differential thrust yields roll and yaw only.
+# Airspeed scaling assumes the elevons see the freestream, and below FW_AIRSPD_STALL
+# it clamps to a (FW_AIRSPD_TRIM / FW_AIRSPD_STALL)^2 = 6.8x gain boost. The elevons
+# sit in the propwash instead, so they keep full authority at zero freestream and
+# that boost drives a ~20 Hz pitch limit cycle to the deflection limits.
+param set-default FW_ARSP_SCALE_EN 0
 param set-default MPC_MAN_Y_MAX 60
 param set-default MC_PITCH_P 5
 
