@@ -34,6 +34,14 @@
 #include <gtest/gtest.h>
 #include "ModeManagement.hpp"
 
+#include <px4_platform_common/time.h>
+#include <uORB/Publication.hpp>
+#include <uORB/Subscription.hpp>
+#include <uORB/topics/register_ext_component_reply.h>
+#include <uORB/topics/register_ext_component_request.h>
+#include <uORB/topics/setpoint_config.h>
+#include <uORB/topics/vehicle_rates_setpoint.h>
+
 static bool modeValid(uint8_t mode)
 {
 	return mode >= Modes::FIRST_EXTERNAL_NAV_STATE && mode <= Modes::LAST_EXTERNAL_NAV_STATE;
@@ -98,4 +106,75 @@ TEST(ModeManagementTest, Hashes)
 	}
 
 	EXPECT_FALSE(modes.hasFreeExternalModes());
+}
+
+TEST(ModeManagementTest, SetpointTimeout)
+{
+	ExternalChecks external_checks;
+	ModeManagement mode_management(external_checks);
+	uORB::Publication<register_ext_component_request_s> registration_pub{ORB_ID(register_ext_component_request)};
+	uORB::Subscription registration_reply_sub{ORB_ID(register_ext_component_reply)};
+	uORB::Publication<setpoint_config_s> setpoint_config_pub{ORB_ID(setpoint_config)};
+	uORB::Publication<vehicle_rates_setpoint_s> rates_setpoint_pub{ORB_ID(vehicle_rates_setpoint)};
+
+	register_ext_component_request_s registration{};
+	registration.timestamp = hrt_absolute_time();
+	registration.request_id = 42;
+	registration.register_arming_check = true;
+	registration.register_mode = true;
+	strncpy(registration.name, "Setpoint timeout test", sizeof(registration.name) - 1);
+	ASSERT_TRUE(registration_pub.publish(registration));
+
+	ModeManagement::UpdateRequest update_request{};
+	mode_management.update(vehicle_status_s::VEHICLE_TYPE_ROTARY_WING, false,
+			       vehicle_status_s::NAVIGATION_STATE_AUTO_LOITER,
+			       vehicle_status_s::NAVIGATION_STATE_AUTO_LOITER, update_request);
+
+	register_ext_component_reply_s registration_reply{};
+	ASSERT_TRUE(registration_reply_sub.update(&registration_reply));
+	ASSERT_TRUE(registration_reply.success);
+	ASSERT_EQ(registration_reply.request_id, registration.request_id);
+	ASSERT_TRUE(modeValid(registration_reply.mode_id));
+
+	setpoint_config_s setpoint_config{};
+	setpoint_config.timestamp = hrt_absolute_time();
+	setpoint_config.source_id = registration_reply.mode_id;
+	setpoint_config.type = setpoint_config_s::TYPE_RATES;
+	setpoint_config.should_apply = true;
+	setpoint_config.timeout_ms = 20;
+	ASSERT_TRUE(setpoint_config_pub.publish(setpoint_config));
+
+	update_request = {};
+	mode_management.update(vehicle_status_s::VEHICLE_TYPE_ROTARY_WING, true, registration_reply.mode_id,
+			       registration_reply.mode_id, update_request);
+	EXPECT_TRUE(update_request.control_setpoint_update);
+	EXPECT_FALSE(external_checks.isUnresponsive(registration_reply.arming_check_id));
+
+	vehicle_rates_setpoint_s rates_setpoint{};
+	rates_setpoint.timestamp = hrt_absolute_time();
+	ASSERT_TRUE(rates_setpoint_pub.publish(rates_setpoint));
+	update_request = {};
+	mode_management.update(vehicle_status_s::VEHICLE_TYPE_ROTARY_WING, true, registration_reply.mode_id,
+			       registration_reply.mode_id, update_request);
+	EXPECT_FALSE(external_checks.isUnresponsive(registration_reply.arming_check_id));
+
+	px4_usleep(25_ms);
+	update_request = {};
+	mode_management.update(vehicle_status_s::VEHICLE_TYPE_ROTARY_WING, true, registration_reply.mode_id,
+			       registration_reply.mode_id, update_request);
+	EXPECT_TRUE(update_request.mode_status_changed);
+	EXPECT_TRUE(external_checks.isUnresponsive(registration_reply.arming_check_id));
+
+	// The failure must remain latched when the failsafe switches away from the external mode.
+	update_request = {};
+	mode_management.update(vehicle_status_s::VEHICLE_TYPE_ROTARY_WING, true, registration_reply.mode_id,
+			       vehicle_status_s::NAVIGATION_STATE_AUTO_LOITER, update_request);
+	EXPECT_TRUE(external_checks.isUnresponsive(registration_reply.arming_check_id));
+
+	// Disarming clears the failure and permits a fresh activation attempt.
+	update_request = {};
+	mode_management.update(vehicle_status_s::VEHICLE_TYPE_ROTARY_WING, false, registration_reply.mode_id,
+			       vehicle_status_s::NAVIGATION_STATE_AUTO_LOITER, update_request);
+	EXPECT_TRUE(update_request.mode_status_changed);
+	EXPECT_FALSE(external_checks.isUnresponsive(registration_reply.arming_check_id));
 }

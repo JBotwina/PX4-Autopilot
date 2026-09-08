@@ -64,6 +64,7 @@ public:
 	void update();
 
 	bool isUnresponsive(int registration_id);
+	bool setSetpointTimedOut(int registration_id, bool timed_out);
 	bool allowUpdateWhileArmed() const { return _param_com_mode_arm_chk.get(); }
 private:
 	static constexpr hrt_abstime REQUEST_TIMEOUT = 50_ms;
@@ -87,6 +88,7 @@ private:
 		bool waiting_for_first_response{true};
 		uint8_t num_no_response{0};
 		bool unresponsive{false};
+		bool setpoint_timed_out{false};
 		uint8_t total_num_unresponsive{0};
 		arming_check_reply_s *reply{nullptr};
 	};

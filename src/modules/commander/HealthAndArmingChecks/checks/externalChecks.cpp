@@ -71,6 +71,7 @@ int ExternalChecks::addRegistration(int8_t nav_mode_id, int8_t replaces_nav_stat
 		_registrations[free_registration_index].waiting_for_first_response = true;
 		_registrations[free_registration_index].num_no_response = 0;
 		_registrations[free_registration_index].unresponsive = false;
+		_registrations[free_registration_index].setpoint_timed_out = false;
 		_registrations[free_registration_index].total_num_unresponsive = 0;
 
 		if (!_registrations[free_registration_index].reply) {
@@ -105,12 +106,22 @@ bool ExternalChecks::isUnresponsive(int registration_id)
 	}
 
 	if (registrationValid(registration_id)) {
-		return _registrations[registration_id].unresponsive;
+		return _registrations[registration_id].unresponsive || _registrations[registration_id].setpoint_timed_out;
 	}
 
 	return false;
 }
 
+bool ExternalChecks::setSetpointTimedOut(int registration_id, bool timed_out)
+{
+	if (registration_id < 0 || registration_id >= MAX_NUM_REGISTRATIONS || !registrationValid(registration_id)) {
+		return false;
+	}
+
+	const bool changed = _registrations[registration_id].setpoint_timed_out != timed_out;
+	_registrations[registration_id].setpoint_timed_out = timed_out;
+	return changed;
+}
 
 void ExternalChecks::checkAndReport(const Context &context, Report &reporter)
 {
@@ -121,20 +132,27 @@ void ExternalChecks::checkAndReport(const Context &context, Report &reporter)
 	}
 
 	NavModes unresponsive_modes{NavModes::None};
+	NavModes setpoint_timeout_modes{NavModes::None};
 
 	for (int reg_idx = 0; reg_idx < MAX_NUM_REGISTRATIONS; ++reg_idx) {
 		if (!registrationValid(reg_idx) || !_registrations[reg_idx].reply) {
 			continue;
 		}
 
-		arming_check_reply_s &reply = *_registrations[reg_idx].reply;
+		Registration &registration = _registrations[reg_idx];
+		arming_check_reply_s &reply = *registration.reply;
+		const int8_t nav_mode_id = registration.nav_mode_id;
 
-		int8_t nav_mode_id = _registrations[reply.registration_id].nav_mode_id;
-
-		if (_registrations[reply.registration_id].unresponsive) {
+		if (registration.unresponsive || registration.setpoint_timed_out) {
 
 			if (nav_mode_id != -1) {
-				unresponsive_modes = unresponsive_modes | reporter.getModeGroup(nav_mode_id);
+				if (registration.setpoint_timed_out) {
+					setpoint_timeout_modes = setpoint_timeout_modes | reporter.getModeGroup(nav_mode_id);
+
+				} else {
+					unresponsive_modes = unresponsive_modes | reporter.getModeGroup(nav_mode_id);
+				}
+
 				setOrClearRequirementBits(true, nav_mode_id, -1, reporter.failsafeFlags().mode_req_other);
 			}
 
@@ -150,7 +168,7 @@ void ExternalChecks::checkAndReport(const Context &context, Report &reporter)
 			} else {
 				modes = reporter.getModeGroup(nav_mode_id);
 
-				int8_t replaces_nav_state = _registrations[reply.registration_id].replaces_nav_state;
+				const int8_t replaces_nav_state = registration.replaces_nav_state;
 
 				if (replaces_nav_state != -1) {
 					modes = modes | reporter.getModeGroup(replaces_nav_state);
@@ -218,6 +236,15 @@ void ExternalChecks::checkAndReport(const Context &context, Report &reporter)
 					    events::Log::Critical, "Mode is unresponsive");
 	}
 
+	if (setpoint_timeout_modes != NavModes::None) {
+		/* EVENT
+		 * @description
+		 * The external mode stopped publishing its configured control setpoint stream.
+		 */
+		reporter.armingCheckFailure(setpoint_timeout_modes, health_component_t::system,
+					    events::ID("check_external_mode_setpoint_timeout"),
+					    events::Log::Critical, "External mode setpoint timed out");
+	}
 }
 
 void ExternalChecks::update()
